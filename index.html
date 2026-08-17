@@ -6,592 +6,752 @@
 <title>남해 바래길 3일 도보여행</title>
 <style>
   :root{
-    --kraft:#efe4cc;
-    --kraft-2:#e6d7b8;
-    --paper:#fbf6ea;
-    --ink:#413a2b;
-    --sub:#8a7d63;
-    --sage:#8bab84;
-    --sage-d:#5f8459;
-    --terra:#d98a63;
-    --sky:#9cc0d4;
-    --line:#d9c9a5;
+    --sea:#1c6e63;
+    --sea-dark:#0f4a42;
+    --sand:#f4efe4;
+    --card:#ffffff;
+    --ink:#243330;
+    --sub:#6b7a76;
+    --accent:#e07a3f;
   }
   *{box-sizing:border-box;}
-  html{scroll-behavior:smooth;}
   body{
     margin:0;
     font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Segoe UI",sans-serif;
+    background:var(--sand);
     color:var(--ink);
-    line-height:1.6;
-    background-color:var(--kraft);
-    background-image:
-      radial-gradient(circle at 20% 30%, rgba(255,255,255,.35) 0, transparent 40%),
-      radial-gradient(circle at 80% 70%, rgba(216,193,150,.35) 0, transparent 45%),
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.4 0 0 0 0 0.36 0 0 0 0 0.25 0 0 0 .04 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+    line-height:1.55;
   }
-  img{max-width:100%;display:block;}
-
-  /* ===== 상단 네비 ===== */
-  nav{
-    position:sticky;top:0;z-index:50;
-    display:flex;align-items:center;justify-content:space-between;
-    gap:12px;padding:12px 18px;
-    background:rgba(251,246,234,.82);
-    backdrop-filter:blur(8px);
-    border-bottom:2px dashed var(--line);
+  header{
+    background:linear-gradient(160deg,var(--sea) 0%,var(--sea-dark) 100%);
+    color:#fff;
+    padding:52px 20px 40px;
+    text-align:center;
   }
-  nav .brand{font-weight:800;font-size:15px;display:flex;align-items:center;gap:7px;}
-  nav .brand .badge{
-    width:26px;height:26px;border-radius:50%;
-    background:var(--sage);display:grid;place-items:center;font-size:15px;
-    transform:rotate(-8deg);box-shadow:0 2px 0 var(--sage-d);
+  header .eyebrow{
+    font-size:13px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    opacity:.75;
+    margin-bottom:10px;
   }
-  nav .links{display:flex;gap:6px;}
-  nav .links a{
-    font-size:12.5px;color:var(--sub);text-decoration:none;font-weight:700;
-    padding:5px 11px;border-radius:999px;transition:.2s;
+  header h1{
+    margin:0 0 12px;
+    font-size:30px;
+    font-weight:800;
   }
-  nav .links a:hover{background:var(--kraft-2);color:var(--ink);}
-  @media(max-width:600px){nav .links{display:none;}}
-
-  .wrap{max-width:720px;margin:0 auto;padding:0 18px 80px;}
-
-  /* ===== 히어로 ===== */
-  header.hero{
-    position:relative;overflow:hidden;text-align:center;
-    padding:60px 20px 86px;
+  header p{
+    margin:0;
+    font-size:15px;
+    opacity:.85;
   }
-  .hero h1{
-    font-size:clamp(30px,7vw,50px);margin:12px 0 6px;font-weight:800;
-    letter-spacing:-.02em;line-height:1.15;
+  .wrap{
+    max-width:640px;
+    margin:0 auto;
+    padding:28px 18px 70px;
   }
-  .hero .sub{color:var(--sub);font-size:clamp(14px,2.6vw,17px);margin:0;}
-  .hero .stamp{
-    display:inline-block;font-size:12px;font-weight:800;letter-spacing:.14em;
-    color:var(--terra);border:2px solid var(--terra);border-radius:8px;
-    padding:5px 12px;transform:rotate(-3deg);text-transform:uppercase;opacity:.9;
+  .summary{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    justify-content:center;
+    margin-top:26px;
   }
-  .chips{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;margin-top:24px;}
-  .chips span{
-    background:var(--paper);border:1.5px solid var(--line);
-    border-radius:999px;padding:8px 15px;font-size:13px;font-weight:600;
-    box-shadow:2px 2px 0 rgba(180,158,116,.35);
-  }
-  .trail{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
-  .trail path{
-    fill:none;stroke:var(--sage-d);stroke-width:3;stroke-linecap:round;
-    stroke-dasharray:10 14;opacity:.5;stroke-dashoffset:0;
-    animation:march 3s linear infinite;
-  }
-  @keyframes march{to{stroke-dashoffset:-48;}}
-  .float{position:absolute;font-size:26px;animation:bob 4s ease-in-out infinite;}
-  @keyframes bob{0%,100%{transform:translateY(0) rotate(-6deg);}50%{transform:translateY(-12px) rotate(6deg);}}
-
-  /* ===== 섹션 공통 ===== */
-  section{margin-top:46px;}
-  .sec-head{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
-  .sec-head .dot{
-    width:34px;height:34px;border-radius:50%;flex-shrink:0;
-    display:grid;place-items:center;font-size:18px;
-    background:var(--sky);box-shadow:0 3px 0 rgba(0,0,0,.08);transform:rotate(-6deg);
-  }
-  .sec-head h2{font-size:22px;margin:0;}
-  .sec-head p{margin:0;font-size:12.5px;color:var(--sub);}
-
-  /* 타임라인(일정) */
-  .timeline{position:relative;padding-left:30px;}
-  .timeline::before{
-    content:"";position:absolute;left:9px;top:6px;bottom:6px;width:0;
-    border-left:3px dashed var(--sage);
+  .summary span{
+    background:rgba(255,255,255,.14);
+    border:1px solid rgba(255,255,255,.28);
+    border-radius:999px;
+    padding:7px 16px;
+    font-size:13px;
   }
   .day{
-    position:relative;margin-bottom:22px;
-    background:var(--paper);border:1.5px solid var(--line);border-radius:18px;
-    padding:20px 20px 22px;box-shadow:4px 5px 0 rgba(180,158,116,.28);
-    transition:transform .25s ease,box-shadow .25s ease;
+    background:var(--card);
+    border-radius:18px;
+    margin-top:22px;
+    padding:24px 22px 26px;
+    box-shadow:0 2px 14px rgba(15,74,66,.08);
   }
-  .day:hover{transform:translateY(-3px) rotate(-.3deg);box-shadow:6px 8px 0 rgba(180,158,116,.32);}
-  .day::before{
-    content:"";position:absolute;left:-30px;top:22px;
-    width:18px;height:18px;border-radius:50%;background:var(--terra);
-    border:3px solid var(--paper);box-shadow:0 0 0 2px var(--terra);
+  .day-label{
+    display:inline-block;
+    background:var(--sea);
+    color:#fff;
+    font-size:13px;
+    font-weight:700;
+    padding:5px 14px;
+    border-radius:999px;
+    margin-bottom:10px;
   }
-  .day .tag{
-    display:inline-block;background:var(--sage);color:#fff;font-weight:800;
-    font-size:12px;padding:4px 12px;border-radius:999px;transform:rotate(-2deg);
-    box-shadow:0 2px 0 var(--sage-d);
+  .day h2{
+    margin:2px 0 4px;
+    font-size:21px;
   }
-  .day h3.title{margin:10px 0 3px;font-size:19px;}
-  .day .desc{color:var(--sub);font-size:13.5px;margin:0 0 14px;}
-
-  .block{margin-top:18px;}
-  .block h4{
-    font-size:14px;margin:0 0 10px;display:flex;align-items:center;gap:6px;
+  .day .desc{
+    color:var(--sub);
+    font-size:14px;
+    margin-bottom:16px;
   }
-
-  /* 코스 카드(지도 사진) — 사진 프레임 느낌 */
+  .block{
+    margin-top:18px;
+  }
+  .block h3{
+    font-size:15px;
+    margin:0 0 10px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
   .course-card{
-    background:#fff;border:1px solid var(--line);border-radius:14px;
-    overflow:hidden;box-shadow:2px 3px 0 rgba(180,158,116,.25);
+    border:1px solid #e7e1d2;
+    border-radius:14px;
+    overflow:hidden;
+    background:#fbfaf6;
   }
-  .course-card .frame{
-    background:#fff;padding:8px 8px 0;
+  .course-card img{
+    width:100%;
+    display:block;
   }
-  .course-card .frame img{width:100%;border-radius:9px;display:block;}
-  .course-meta{padding:14px 16px 16px;}
-  .course-meta .name{font-weight:800;font-size:15px;margin-bottom:6px;}
-  .course-meta table{width:100%;border-collapse:collapse;}
-  .course-meta td{padding:3px 0;font-size:13px;color:var(--sub);}
-  .course-meta td.v{color:var(--ink);font-weight:700;text-align:right;}
-  .pill{
-    display:inline-block;font-size:11px;font-weight:800;color:var(--sage-d);
-    background:rgba(139,171,132,.2);border-radius:6px;padding:2px 8px;margin-top:8px;
+  .course-meta{
+    padding:14px 16px;
+    font-size:13.5px;
+    color:var(--ink);
+  }
+  .course-meta .name{
+    font-weight:700;
+    font-size:15px;
+    margin-bottom:4px;
+  }
+  .course-meta table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:8px;
+  }
+  .course-meta td{
+    padding:3px 0;
+    font-size:13px;
+    color:var(--sub);
+  }
+  .course-meta td.v{
+    color:var(--ink);
+    font-weight:600;
+    text-align:right;
   }
   .note{
-    margin-top:12px;background:#fff4e9;border:1px solid #f1d9bc;color:#8a5a26;
-    font-size:12.5px;padding:9px 12px;border-radius:10px;
+    margin-top:10px;
+    background:#fff4e9;
+    border:1px solid #f1d9bc;
+    color:#8a5a26;
+    font-size:12.5px;
+    padding:8px 12px;
+    border-radius:10px;
   }
-
-  /* 숙소 카드(사진) */
-  .lodge{
-    margin-top:12px;background:linear-gradient(180deg,#fff,#fdf7ea);
-    border:1.5px solid var(--line);border-radius:14px;overflow:hidden;
-    box-shadow:2px 3px 0 rgba(180,158,116,.25);
+  .lodge-card{
+    display:flex;
+    gap:14px;
+    border:1px solid #e7e1d2;
+    border-radius:14px;
+    overflow:hidden;
+    background:#fbfaf6;
   }
-  .lodge img{width:100%;height:180px;object-fit:cover;}
-  .lodge .info{padding:14px 16px 16px;}
-  .lodge .info .name{font-weight:800;font-size:15.5px;display:flex;align-items:center;gap:7px;}
-  .lodge .price{
-    display:inline-block;background:var(--terra);color:#fff;font-weight:800;
-    font-size:12px;padding:3px 11px;border-radius:999px;margin:6px 0 4px;
+  .lodge-card img{
+    width:120px;
+    height:auto;
+    object-fit:cover;
+    flex-shrink:0;
   }
-  .lodge .info p{margin:4px 0;font-size:13px;color:var(--sub);}
-  .lodge .info a{
-    display:inline-block;margin-top:6px;margin-right:12px;font-size:13px;color:var(--sage-d);
-    font-weight:800;text-decoration:none;border-bottom:2px solid var(--sage);
+  .lodge-info{
+    padding:14px 14px 14px 0;
+    flex:1;
   }
-
-  /* 택시 이동 */
+  .lodge-info .name{
+    font-weight:700;
+    font-size:15.5px;
+    margin-bottom:4px;
+  }
+  .lodge-info .price{
+    display:inline-block;
+    background:var(--accent);
+    color:#fff;
+    font-size:12.5px;
+    font-weight:700;
+    padding:3px 10px;
+    border-radius:999px;
+    margin-bottom:8px;
+  }
+  .lodge-info p{
+    margin:4px 0;
+    font-size:13px;
+    color:var(--sub);
+  }
+  .lodge-info a{
+    display:inline-block;
+    margin-top:8px;
+    font-size:13px;
+    color:var(--sea);
+    font-weight:700;
+    text-decoration:none;
+    border-bottom:1.5px solid var(--sea);
+  }
   .taxi{
-    display:flex;gap:12px;align-items:flex-start;margin-top:12px;
-    background:rgba(156,192,212,.2);border:1px solid #bcd3de;border-radius:14px;padding:14px 16px;
+    display:flex;
+    gap:12px;
+    align-items:flex-start;
+    background:#eef6f4;
+    border:1px solid #d3e7e2;
+    border-radius:14px;
+    padding:14px 16px;
   }
-  .taxi .icon{font-size:22px;line-height:1;}
+  .taxi .icon{
+    font-size:22px;
+    line-height:1;
+  }
   .taxi b{display:block;font-size:14px;margin-bottom:3px;}
   .taxi span{font-size:13px;color:var(--sub);}
-
-  /* ===== 캐러셀 ===== */
-  .carousel{position:relative;margin-top:2px;}
+  .cost-box{
+    margin-top:24px;
+    background:var(--card);
+    border-radius:18px;
+    padding:22px;
+    box-shadow:0 2px 14px rgba(15,74,66,.08);
+  }
+  .cost-box h2{
+    font-size:17px;
+    margin:0 0 12px;
+  }
+  .cost-row{
+    display:flex;
+    justify-content:space-between;
+    padding:9px 0;
+    border-bottom:1px dashed #e2dccb;
+    font-size:14px;
+  }
+  .cost-row:last-child{border-bottom:none;}
+  .cost-row .who{color:var(--sub);font-size:12.5px;}
+  .memo-box{
+    margin-top:16px;
+    background:#fff;
+    border-radius:18px;
+    padding:20px 22px;
+    box-shadow:0 2px 14px rgba(15,74,66,.08);
+    font-size:13.5px;
+    color:var(--sub);
+  }
+  .memo-box h2{
+    font-size:15px;
+    color:var(--ink);
+    margin:0 0 10px;
+  }
+  .memo-box ul{margin:0;padding-left:18px;}
+  .memo-box li{margin-bottom:5px;}
+  footer{
+    text-align:center;
+    color:var(--sub);
+    font-size:12px;
+    padding:30px 20px 40px;
+  }
+  @media (max-width:420px){
+    .lodge-card{flex-direction:column;}
+    .lodge-card img{width:100%;height:150px;}
+  }
+  .carousel{
+    position:relative;
+    margin-top:2px;
+  }
   .carousel-track{
-    display:flex;overflow-x:auto;scroll-snap-type:x mandatory;
-    -webkit-overflow-scrolling:touch;border-radius:12px;scrollbar-width:none;
-    background:#fff;border:1px solid var(--line);
+    display:flex;
+    overflow-x:auto;
+    scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;
+    border-radius:14px;
+    scrollbar-width:none;
   }
   .carousel-track::-webkit-scrollbar{display:none;}
-  .carousel-track .slide{flex:0 0 100%;scroll-snap-align:center;}
-  .carousel-track img{width:100%;display:block;}
+  .carousel-track .slide{
+    flex:0 0 100%;
+    scroll-snap-align:center;
+  }
+  .carousel-track img{
+    width:100%;
+    display:block;
+  }
   .carousel-btn{
-    position:absolute;top:50%;transform:translateY(-50%);
-    width:34px;height:34px;border-radius:50%;border:none;
-    background:rgba(65,58,43,.5);color:#fff;font-size:18px;line-height:1;
-    cursor:pointer;display:flex;align-items:center;justify-content:center;
+    position:absolute;
+    top:50%;
+    transform:translateY(-50%);
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    border:none;
+    background:rgba(15,74,66,.55);
+    color:#fff;
+    font-size:18px;
+    line-height:1;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
   }
-  .carousel-btn.prev{left:10px;}.carousel-btn.next{right:10px;}
-  .carousel-btn:hover{background:rgba(65,58,43,.78);}
-  .carousel-dots{display:flex;justify-content:center;gap:6px;margin-top:10px;}
-  .carousel-dots .dot{width:7px;height:7px;border-radius:50%;background:#d8cbb0;border:none;padding:0;cursor:pointer;}
-  .carousel-dots .dot.active{background:var(--sage-d);width:16px;border-radius:4px;}
+  .carousel-btn.prev{left:10px;}
+  .carousel-btn.next{right:10px;}
+  .carousel-btn:hover{background:rgba(15,74,66,.8);}
+  .carousel-dots{
+    display:flex;
+    justify-content:center;
+    gap:6px;
+    margin-top:10px;
+  }
+  .carousel-dots .dot{
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    background:#d8d1bd;
+    border:none;
+    padding:0;
+    cursor:pointer;
+  }
+  .carousel-dots .dot.active{
+    background:var(--sea);
+    width:16px;
+    border-radius:4px;
+  }
 
-  /* ===== 지출 & 정산 (종이지도 테마) ===== */
+  /* ===== 지출 & 정산 ===== */
   .settle-box{
-    background:var(--paper);border:2px dashed var(--sage);border-radius:22px;
-    padding:22px 20px 26px;box-shadow:5px 6px 0 rgba(139,171,132,.25);
+    margin-top:24px;
+    background:var(--card);
+    border-radius:18px;
+    padding:22px 20px 24px;
+    box-shadow:0 2px 14px rgba(15,74,66,.08);
   }
-  .settle-box > h2{font-size:20px;margin:0 0 4px;}
-  .settle-box .intro{color:var(--sub);font-size:13px;margin:0 0 16px;}
-  .st-status{display:none;font-size:13px;padding:10px 12px;border-radius:10px;margin-bottom:14px;}
-  .st-status.loading{background:rgba(156,192,212,.2);color:#3f6070;}
-  .st-status.error{background:#fdece0;color:#a1512b;border:1px solid #f1d9bc;}
+  .settle-box > h2{
+    font-size:18px;
+    margin:0 0 4px;
+  }
+  .settle-box .intro{
+    color:var(--sub);
+    font-size:13px;
+    margin:0 0 16px;
+  }
+  .st-status{
+    display:none;
+    font-size:13px;
+    padding:10px 12px;
+    border-radius:10px;
+    margin-bottom:14px;
+  }
+  .st-status.loading{background:#eef6f4;color:var(--sea-dark);}
+  .st-status.error{background:#fdecec;color:#a13b3b;border:1px solid #f3c9c9;}
   .st-panel{
-    background:#fff;border:1px solid var(--line);border-radius:16px;
-    padding:16px;margin-top:14px;box-shadow:2px 3px 0 rgba(180,158,116,.2);
+    border:1px solid #ece6d7;
+    border-radius:14px;
+    padding:16px;
+    margin-top:14px;
+    background:#fbfaf6;
   }
-  .st-panel > h3{font-size:14.5px;margin:0 0 12px;display:flex;align-items:center;gap:6px;}
-  .st-label{display:block;font-size:12px;font-weight:800;color:var(--sub);margin-bottom:11px;}
+  .st-panel > h3{
+    font-size:14.5px;
+    margin:0 0 12px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .st-label{
+    display:block;
+    font-size:12.5px;
+    font-weight:600;
+    color:var(--sub);
+    margin-bottom:10px;
+  }
   .st-label input,.st-label select{
-    display:block;width:100%;margin-top:6px;padding:11px 12px;font-size:14px;color:var(--ink);
-    border:1.5px solid var(--line);border-radius:11px;background:#fffdf7;font-family:inherit;
+    display:block;
+    width:100%;
+    margin-top:5px;
+    padding:9px 11px;
+    font-size:14px;
+    color:var(--ink);
+    border:1px solid #dcd5c4;
+    border-radius:9px;
+    background:#fff;
+    font-family:inherit;
   }
-  .st-label input:focus,.st-label select:focus{outline:none;border-color:var(--sage);box-shadow:0 0 0 3px rgba(139,171,132,.2);}
-  .st-row2{display:flex;gap:12px;}
+  .st-label input:focus,.st-label select:focus{
+    outline:none;
+    border-color:var(--sea);
+    box-shadow:0 0 0 3px rgba(28,110,99,.12);
+  }
+  .st-row2{display:flex;gap:10px;}
   .st-row2 .st-label{flex:1;}
-  @media(max-width:520px){.st-row2{flex-direction:column;gap:0;}}
-  .st-inline{display:flex;gap:10px;align-items:flex-end;}
+  .st-inline{display:flex;gap:8px;align-items:flex-end;}
   .st-inline .st-label{flex:1;margin-bottom:0;}
   .st-btn{
-    border:none;cursor:pointer;font-family:inherit;font-weight:800;
-    background:var(--sage-d);color:#fff;font-size:14px;padding:11px 17px;border-radius:12px;
-    box-shadow:0 3px 0 #48633f;transition:transform .12s;white-space:nowrap;
+    border:none;
+    background:var(--sea);
+    color:#fff;
+    font-weight:700;
+    font-size:14px;
+    padding:10px 16px;
+    border-radius:9px;
+    cursor:pointer;
+    font-family:inherit;
+    white-space:nowrap;
   }
-  .st-btn:hover{transform:translateY(-1px);}
-  .st-btn:active{transform:translateY(1px);box-shadow:0 1px 0 #48633f;}
-  .st-btn:disabled{background:#b9b09a;box-shadow:0 3px 0 #97907d;cursor:not-allowed;}
-  .st-btn.full{width:100%;margin-top:6px;}
+  .st-btn:hover{background:var(--sea-dark);}
+  .st-btn:disabled{background:#b9c6c2;cursor:not-allowed;}
+  .st-btn.full{width:100%;margin-top:4px;}
   .st-linkbtn{
-    border:none;background:none;color:var(--sage-d);font-size:12px;font-weight:800;
-    cursor:pointer;padding:0;margin-left:8px;text-decoration:underline;font-family:inherit;
+    border:none;background:none;color:var(--sea);
+    font-size:12px;font-weight:700;cursor:pointer;
+    padding:0;margin-left:8px;text-decoration:underline;font-family:inherit;
   }
-  .st-checks{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-weight:400;}
+  .st-checks{
+    display:flex;flex-wrap:wrap;gap:8px 12px;
+    margin-top:8px;font-weight:400;
+  }
   .st-check{
-    display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13.5px;color:var(--ink);
-    background:#fffdf7;border:1.5px solid var(--line);border-radius:999px;padding:6px 13px;user-select:none;
+    display:flex;align-items:center;gap:5px;
+    font-size:13.5px;color:var(--ink);cursor:pointer;
   }
-  .st-check input{width:15px;height:15px;accent-color:var(--sage-d);}
+  .st-check input{width:16px;height:16px;accent-color:var(--sea);}
   .st-empty{color:var(--sub);font-size:13px;margin:4px 0;}
   .st-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
   .st-chip{
-    display:inline-flex;align-items:center;gap:5px;background:var(--kraft);
-    border:1.5px solid var(--line);color:var(--ink);font-size:13px;font-weight:700;
-    padding:5px 6px 5px 13px;border-radius:999px;
+    display:inline-flex;align-items:center;gap:4px;
+    background:#eef6f4;border:1px solid #d3e7e2;
+    color:var(--sea-dark);font-size:13px;font-weight:600;
+    padding:5px 6px 5px 12px;border-radius:999px;
   }
   .st-chip-x{
-    border:none;background:rgba(65,58,43,.14);color:var(--ink);width:18px;height:18px;
-    border-radius:50%;line-height:1;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    border:none;background:rgba(15,74,66,.14);color:var(--sea-dark);
+    width:18px;height:18px;border-radius:50%;line-height:1;
+    font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;
   }
-  .st-chip-x:hover{background:var(--terra);color:#fff;}
-  .st-exp{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:11px 0;border-bottom:1px dashed var(--line);}
+  .st-chip-x:hover{background:var(--accent);color:#fff;}
+  .st-exp{
+    display:flex;justify-content:space-between;align-items:flex-start;gap:10px;
+    padding:10px 0;border-bottom:1px dashed #e2dccb;
+  }
   .st-exp:last-child{border-bottom:none;}
-  .st-exp-desc{font-weight:800;font-size:14px;}
+  .st-exp-desc{font-weight:600;font-size:14px;}
   .st-exp-sub{color:var(--sub);font-size:12px;margin-top:3px;}
-  .st-exp-amt{display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;white-space:nowrap;}
-  .st-total{text-align:right;font-size:13px;color:var(--sub);margin-bottom:12px;}
-  .st-total b{color:var(--ink);font-size:17px;}
+  .st-exp-amt{
+    display:flex;align-items:center;gap:8px;
+    font-weight:700;font-size:14px;white-space:nowrap;
+  }
+  /* 아이콘 버튼(수정 ✎), 작은 버튼, 인라인 편집 */
+  .st-iconbtn{
+    border:none;background:rgba(15,74,66,.10);color:var(--sea-dark);
+    width:22px;height:22px;border-radius:7px;line-height:1;
+    font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  }
+  .st-iconbtn:hover{background:var(--sea);color:#fff;}
+  .st-btn.sm{padding:7px 13px;font-size:13px;}
+  .st-exp.editing{display:block;}
+  .st-exp-edit{width:100%;}
+  .st-edit-actions{display:flex;align-items:center;gap:8px;margin-top:4px;}
+  /* 준비물 메모 목록 */
+  .st-note{
+    display:flex;justify-content:space-between;align-items:flex-start;gap:10px;
+    padding:9px 0;border-bottom:1px dashed #e2dccb;
+  }
+  .st-note:last-child{border-bottom:none;}
+  .st-note.editing{align-items:center;}
+  .st-note-text{font-size:14px;color:var(--ink);line-height:1.55;flex:1;word-break:break-word;}
+  .st-note-actions{display:flex;align-items:center;gap:6px;white-space:nowrap;}
+  .st-note-input{
+    flex:1;padding:8px 11px;font-size:14px;color:var(--ink);
+    border:1px solid #dcd5c4;border-radius:9px;background:#fff;font-family:inherit;
+  }
+  .st-note-input:focus{
+    outline:none;border-color:var(--sea);box-shadow:0 0 0 3px rgba(28,110,99,.12);
+  }
+  .st-total{
+    text-align:right;font-size:14px;color:var(--sub);margin-bottom:12px;
+  }
+  .st-total b{color:var(--ink);font-size:16px;}
   .st-bals{display:flex;flex-direction:column;gap:8px;}
   .st-bal{
     display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;
-    background:var(--kraft);border:1px solid var(--line);border-radius:12px;padding:11px 15px;
+    background:#fff;border:1px solid #ece6d7;border-radius:10px;padding:10px 14px;
   }
-  .st-bal-name{font-weight:800;font-size:14px;}
+  .st-bal-name{font-weight:700;font-size:14px;}
   .st-bal-detail{grid-column:1;font-size:11.5px;color:var(--sub);}
-  .st-bal-net{grid-column:2;grid-row:1 / span 2;font-weight:800;font-size:13.5px;text-align:right;}
-  .st-bal-net.pos{color:var(--sage-d);}
-  .st-bal-net.neg{color:var(--terra);}
+  .st-bal-net{grid-column:2;grid-row:1 / span 2;font-weight:700;font-size:13.5px;text-align:right;}
+  .st-bal-net.pos{color:#1c7d54;}
+  .st-bal-net.neg{color:#c0553a;}
   .st-bal-net.zero{color:var(--sub);}
   .st-sub-h{font-size:14px;margin:18px 0 10px;}
   .st-transfers{display:flex;flex-direction:column;gap:8px;}
   .st-transfer{
-    display:flex;align-items:center;gap:8px;background:rgba(156,192,212,.22);
-    border:1px solid #bcd3de;border-radius:12px;padding:11px 15px;font-size:14px;font-weight:600;
+    display:flex;align-items:center;gap:8px;
+    background:#eef6f4;border:1px solid #d3e7e2;border-radius:10px;
+    padding:10px 14px;font-size:14px;
   }
-  .st-transfer-amt{margin-left:auto;font-weight:800;color:#3f6070;}
-
-  /* 준비물 */
-  .memo{
-    background:linear-gradient(180deg,#fffdf4,#fbf3dd);
-    border:1.5px solid var(--line);border-radius:18px;padding:20px 22px;
-    box-shadow:4px 5px 0 rgba(180,158,116,.25);
-  }
-  .memo ul{margin:0;padding-left:18px;}
-  .memo li{margin-bottom:7px;font-size:14px;}
-
-  footer{text-align:center;color:var(--sub);font-size:12.5px;padding:44px 20px 30px;}
-  footer .paw{font-size:20px;}
-
-  .reveal{opacity:0;transform:translateY(24px);transition:opacity .6s ease,transform .6s ease;}
-  .reveal.in{opacity:1;transform:none;}
-  @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none;}.trail path,.float{animation:none;}}
+  .st-transfer-amt{margin-left:auto;font-weight:800;color:var(--sea-dark);}
 </style>
 </head>
 <body>
 
-<nav>
-  <div class="brand"><span class="badge">🐾</span>남해 바래길</div>
-  <div class="links">
-    <a href="#days">일정</a>
-    <a href="#money">지출·정산</a>
-    <a href="#memo">준비물</a>
-  </div>
-</nav>
-
-<header class="hero">
-  <svg class="trail" viewBox="0 0 720 300" preserveAspectRatio="none">
-    <path d="M-20,240 C140,150 220,300 360,180 S560,60 760,170"/>
-  </svg>
-  <span class="float" style="left:7%;top:24%">🌿</span>
-  <span class="float" style="right:9%;top:18%;animation-delay:1s">🐚</span>
-  <span class="float" style="left:13%;bottom:16%;animation-delay:.6s">⛵</span>
-  <span class="float" style="right:13%;bottom:22%;animation-delay:1.4s">☀️</span>
-  <div class="wrap" style="padding-bottom:0">
-    <span class="stamp">Namhae Barae-gil · 3 Days</span>
-    <h1>바다 따라 걷는<br>남해 바래길 산책</h1>
-    <p class="sub">함께 걷는 3일, 지도 한 장에 담았어요 🗺️</p>
-    <div class="chips">
-      <span>📍 남해 · 창선면 일대</span>
-      <span>🚶 3일 / 약 32.5km</span>
-      <span>🏠 숙소 2곳</span>
-    </div>
+<header>
+  <div class="eyebrow">Namhae Barae-gil · 3 Days</div>
+  <h1>🌊 남해 바래길 도보여행</h1>
+  <p>함께 걷는 3일 코스 정리</p>
+  <div class="summary">
+    <span>📍 남해 · 창선면 일대</span>
+    <span>🚶 총 3일 / 약 32.5km</span>
+    <span>🏠 숙소 2곳</span>
   </div>
 </header>
 
 <div class="wrap">
 
-  <!-- 일정 -->
-  <section id="days">
-    <div class="sec-head">
-      <span class="dot">🗓️</span>
-      <div><h2>걷는 일정</h2><p>어디를 어떻게 걷고 어디서 묵는지</p></div>
-    </div>
+  <!-- DAY 1 -->
+  <section class="day">
+    <span class="day-label">DAY 1</span>
+    <h2>도착 &amp; 첫째 날 숙소</h2>
+    <p class="desc">이동 후 숙소에서 여장을 풀고 첫째 날 밤을 보내요.</p>
 
-    <div class="timeline">
-
-      <!-- DAY 1 -->
-      <div class="day reveal">
-        <span class="tag">DAY 1</span>
-        <h3 class="title">도착 &amp; 첫째 날 숙소</h3>
-        <p class="desc">이동 후 숙소에서 여장을 풀고 첫째 날 밤을 보내요.</p>
-        <div class="block">
-          <h4>🏠 숙소</h4>
-          <div class="lodge">
-            <img src="assets/lodge1.png" alt="남해는, 지금">
-            <div class="info">
-              <div class="name">🏡 남해는, 지금</div>
-              <span class="price">1인실 17만원 / 박</span>
-              <p>4명이 나눠서 결제 (1일차만)</p>
-              <a href="https://naver.me/5V8TldZP" target="_blank">네이버지도에서 보기 →</a>
-            </div>
-          </div>
+    <div class="block">
+      <h3>🏠 숙소</h3>
+      <div class="lodge-card">
+        <img src="assets/lodge1.png" alt="남해는, 지금">
+        <div class="lodge-info">
+          <div class="name">남해는, 지금</div>
+          <span class="price">1인실 기준 17만원 / 박</span>
+          <p>4명이 나눠서 결제</p>
+          <a href="https://naver.me/5V8TldZP" target="_blank">네이버지도에서 보기 →</a>
         </div>
       </div>
-
-      <!-- DAY 2 -->
-      <div class="day reveal">
-        <span class="tag">DAY 2</span>
-        <h3 class="title">말발굽길 + 고사리밭길 일부</h3>
-        <p class="desc">적량마을에서 출발해 가인리까지, 총 약 17.5km를 걸어요.</p>
-
-        <div class="block">
-          <h4>🥾 도보 코스 ① — 5코스 말발굽길</h4>
-          <div class="course-card">
-            <div class="frame"><img src="assets/map05.png" alt="05코스 말발굽길 지도"></div>
-            <div class="course-meta">
-              <div class="name">말발굽길 (남파랑길 38코스)</div>
-              <table>
-                <tr><td>시작점</td><td class="v">적량마을</td></tr>
-                <tr><td>총 거리</td><td class="v">11.9km</td></tr>
-                <tr><td>걷는 시간</td><td class="v">4시간 30분 내외</td></tr>
-              </table>
-              <span class="pill">난이도 ★★</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="block">
-          <h4>🌿 도보 코스 ② — 4코스 고사리밭길 (일부, 가인리까지)</h4>
-          <div class="course-card">
-            <div class="frame"><img src="assets/map04.png" alt="04코스 고사리밭길 지도"></div>
-            <div class="course-meta">
-              <div class="name">고사리밭길 (남파랑길 37코스)</div>
-              <table>
-                <tr><td>코스 전체 시작점</td><td class="v">창선면행정복지센터</td></tr>
-                <tr><td>코스 전체 거리</td><td class="v">14.9km (오늘은 가인리까지)</td></tr>
-              </table>
-              <span class="pill">난이도 ★★★★</span>
-              <div class="note">⚠️ 3~6월 고사리밭길은 사전예약제로만 탐방 가능 — 예약 여부 미리 확인!</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="block">
-          <h4>📸 말발굽길 미리보기</h4>
-          <div class="carousel" id="day2-carousel">
-            <div class="carousel-track">
-              <div class="slide"><img src="assets/day2-carousel/slide-01.jpg" alt="05 말발굽길 코스 정보 - 총거리 12.2km, 걷는 시간 4시간 30분 내외, 난이도 ★★" loading="lazy"></div>
-              <div class="slide"><img src="assets/day2-carousel/slide-02.jpg" alt="말발굽길 구간별 거리 안내 - 적량마을부터 창선교 남단(지족)까지" loading="lazy"></div>
-              <div class="slide"><img src="assets/day2-carousel/slide-03.jpg" alt="힐링 포인트1 창선교, 적량마을에서 시작해 대곡과 장포를 지나는 코스 지도" loading="lazy"></div>
-              <div class="slide"><img src="assets/day2-carousel/slide-04.jpg" alt="힐링 포인트2 추섬공원, 고려시대 군마를 키우던 지역이라 말발굽길이라는 이름이 붙음" loading="lazy"></div>
-              <div class="slide"><img src="assets/day2-carousel/slide-05.jpg" alt="코스1 보현사, 숲길 사이 고즈넉한 쉼터" loading="lazy"></div>
-              <div class="slide"><img src="assets/day2-carousel/slide-06.jpg" alt="코스2 지족해협죽방렴, 남해 전통 어업 유산" loading="lazy"></div>
-              <div class="slide"><img src="assets/day2-carousel/slide-07.jpg" alt="잔잔한 바다와 포구 풍경" loading="lazy"></div>
-              <div class="slide"><img src="assets/day2-carousel/slide-08.jpg" alt="작은 어선이 머무는 포구와 창선면 마을길 풍경" loading="lazy"></div>
-              <div class="slide"><img src="assets/day2-carousel/slide-09.jpg" alt="푸른 바다를 따라 걷는 말발굽길 전경" loading="lazy"></div>
-              <div class="slide"><img src="assets/day2-carousel/slide-10.jpg" alt="숲길과 해안길이 번갈아 이어지는 구간 풍경" loading="lazy"></div>
-              <div class="slide"><img src="assets/day2-carousel/slide-11.jpg" alt="말발굽길의 탁 트인 바다 풍경을 배경으로 선 사람" loading="lazy"></div>
-              <div class="slide"><img src="assets/day2-carousel/slide-12.jpg" alt="걷는 동안 만나는 풍경과 이야기, 작은소풍 바래길 행사 안내" loading="lazy"></div>
-              <div class="slide"><img src="assets/day2-carousel/slide-13.jpg" alt="시작점 적량마을 안내, 바다와 마을을 잇는 말발굽길" loading="lazy"></div>
-            </div>
-            <button type="button" class="carousel-btn prev" aria-label="이전 사진">‹</button>
-            <button type="button" class="carousel-btn next" aria-label="다음 사진">›</button>
-            <div class="carousel-dots">
-              <button type="button" class="dot active" aria-label="1번 사진으로 이동" aria-current="true"></button>
-              <button type="button" class="dot" aria-label="2번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="3번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="4번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="5번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="6번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="7번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="8번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="9번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="10번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="11번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="12번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="13번 사진으로 이동" aria-current="false"></button>
-            </div>
-          </div>
-        </div>
-
-        <div class="block">
-          <h4>🏠 숙소</h4>
-          <div class="lodge">
-            <img src="assets/lodge2.png" alt="파도가 머무는 정원">
-            <div class="info">
-              <div class="name">🌊 파도가 머무는 정원</div>
-              <span class="price">30만원 / 박</span>
-              <p>가인리 소재 · 별장식 민박 · 앞바다 수영/스노클링 가능</p>
-              <p>3명이 나눠서 결제</p>
-              <a href="https://naver.me/FvQ1jynR" target="_blank">네이버지도에서 보기 →</a>
-              <a href="https://m.cafe.naver.com/ca-fe/web/cafes/eemog/articles/118?useCafeId=false&tc" target="_blank">숙소 소개글 →</a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- DAY 3 -->
-      <div class="day reveal">
-        <span class="tag">DAY 3</span>
-        <h3 class="title">동대만길</h3>
-        <p class="desc">창선대교 단항검문소에서 출발해 창선면행정복지센터까지 15km를 걸어요.</p>
-        <p>아마도 더 걷겠죠?</p>
-
-        <div class="block">
-          <h4>🥾 도보 코스 — 3코스 동대만길</h4>
-          <div class="course-card">
-            <div class="frame"><img src="assets/map03.png" alt="03코스 동대만길 지도"></div>
-            <div class="course-meta">
-              <div class="name">동대만길 (남파랑길 36코스)</div>
-              <table>
-                <tr><td>출발</td><td class="v">창선대교 단항검문소</td></tr>
-                <tr><td>도착</td><td class="v">창선면행정복지센터</td></tr>
-                <tr><td>총 거리</td><td class="v">15.0km</td></tr>
-                <tr><td>걷는 시간</td><td class="v">5시간 30분 내외</td></tr>
-              </table>
-              <span class="pill">난이도 ★★★</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="block">
-          <h4>📸 동대만길 미리보기</h4>
-          <div class="carousel" id="day3-carousel">
-            <div class="carousel-track">
-              <div class="slide"><img src="assets/day3-carousel/slide-01.jpg" alt="동대만길 소개 - 창선대교 단항검문소부터 창선면행정복지센터까지 구간별 거리 안내" loading="lazy"></div>
-              <div class="slide"><img src="assets/day3-carousel/slide-02.jpg" alt="03 동대만길 코스 정보 - 총거리 15.0km, 걷는 시간 5시간 30분 내외, 난이도 ★★★" loading="lazy"></div>
-              <div class="slide"><img src="assets/day3-carousel/slide-03.jpg" alt="인생샷 포인트1 창선대교" loading="lazy"></div>
-              <div class="slide"><img src="assets/day3-carousel/slide-04.jpg" alt="인생샷 포인트2 대방산" loading="lazy"></div>
-              <div class="slide"><img src="assets/day3-carousel/slide-05.jpg" alt="인생샷 포인트3 왕후박나무, 수령 500년 이상 천연기념물" loading="lazy"></div>
-              <div class="slide"><img src="assets/day3-carousel/slide-06.jpg" alt="동대만 해안 마을 풍경" loading="lazy"></div>
-              <div class="slide"><img src="assets/day3-carousel/slide-07.jpg" alt="동대만길을 따라 걷는 하늘과 숲 풍경" loading="lazy"></div>
-              <div class="slide"><img src="assets/day3-carousel/slide-08.jpg" alt="동대만길 숲길 구간 전경" loading="lazy"></div>
-              <div class="slide"><img src="assets/day3-carousel/slide-09.jpg" alt="바다 위 소초도 풍경" loading="lazy"></div>
-              <div class="slide"><img src="assets/day3-carousel/slide-10.jpg" alt="시작점 창선대교 단항검문소 해안도로" loading="lazy"></div>
-              <div class="slide"><img src="assets/day3-carousel/slide-11.jpg" alt="남해바래길탐방안내센터 인스타그램과 앱 QR코드 안내" loading="lazy"></div>
-            </div>
-            <button type="button" class="carousel-btn prev" aria-label="이전 사진">‹</button>
-            <button type="button" class="carousel-btn next" aria-label="다음 사진">›</button>
-            <div class="carousel-dots">
-              <button type="button" class="dot active" aria-label="1번 사진으로 이동" aria-current="true"></button>
-              <button type="button" class="dot" aria-label="2번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="3번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="4번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="5번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="6번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="7번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="8번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="9번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="10번 사진으로 이동" aria-current="false"></button>
-              <button type="button" class="dot" aria-label="11번 사진으로 이동" aria-current="false"></button>
-            </div>
-          </div>
-        </div>
-
-        <div class="block">
-          <h4>🚕 이동</h4>
-          <div class="taxi">
-            <div class="icon">🚕</div>
-            <div>
-              <b>창선면 → 1일차 숙소</b>
-              <span>도보 코스 완주 후 창선면에서 택시로 약 10분 이동해 첫째 날 숙소로 복귀합니다.</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
     </div>
   </section>
 
-  <!-- 지출 & 정산 -->
-  <section id="money" class="reveal">
-    <div class="sec-head">
-      <span class="dot" style="background:var(--sage)">💰</span>
-      <div><h2>지출 &amp; 정산</h2><p>걷다가 쓴 금액을 기록하면 여행자별로 자동 정산</p></div>
+  <!-- DAY 2 -->
+  <section class="day">
+    <span class="day-label">DAY 2</span>
+    <h2>말발굽길 + 고사리밭길 일부</h2>
+    <p class="desc">적량마을에서 출발해 가인리까지, 총 약 17.5km를 걸어요.</p>
+
+    <div class="block">
+      <h3>🚶 도보 코스 ① — 5코스 말발굽길</h3>
+      <div class="course-card">
+        <img src="assets/map05.png" alt="05코스 말발굽길 지도">
+        <div class="course-meta">
+          <div class="name">말발굽길 (남파랑길 38코스)</div>
+          <table>
+            <tr><td>시작점</td><td class="v">적량마을</td></tr>
+            <tr><td>총 거리</td><td class="v">11.9km</td></tr>
+            <tr><td>걷는 시간</td><td class="v">4시간 30분 내외</td></tr>
+            <tr><td>난이도</td><td class="v">★★☆☆</td></tr>
+          </table>
+        </div>
+      </div>
     </div>
 
-    <section class="settle-box" id="settle">
-      <h2>💰 지출 &amp; 정산</h2>
-      <p class="intro">여행자를 등록하고, 걷다가 쓴 금액을 기록하면 마지막에 여행자별로 자동 정산돼요. 기록은 함께 공유돼서 누구나 같은 화면을 봅니다.</p>
-
-      <div class="st-status" id="st-status"></div>
-
-      <div class="st-panel">
-        <h3>🧑‍🤝‍🧑 여행자</h3>
-        <div class="st-chips" id="st-traveler-list"></div>
-        <form id="st-traveler-form" class="st-inline" autocomplete="off">
-          <label class="st-label">이름 추가
-            <input type="text" id="st-traveler-name" placeholder="예: 미솔" maxlength="40" required>
-          </label>
-          <button type="submit" class="st-btn">추가</button>
-        </form>
+    <div class="block">
+      <h3>🚶 도보 코스 ② — 4코스 고사리밭길 (일부, 가인리까지)</h3>
+      <div class="course-card">
+        <img src="assets/map04.png" alt="04코스 고사리밭길 지도">
+        <div class="course-meta">
+          <div class="name">고사리밭길 (남파랑길 37코스)</div>
+          <table>
+            <tr><td>코스 전체 시작점</td><td class="v">창선면행정복지센터</td></tr>
+            <tr><td>코스 전체 거리</td><td class="v">14.9km (오늘은 가인리까지만)</td></tr>
+            <tr><td>난이도</td><td class="v">★★★★</td></tr>
+          </table>
+          <div class="note">⚠️ 3~6월 고사리밭길은 사전예약제로만 탐방 가능 — 예약 여부 미리 확인!</div>
+        </div>
       </div>
+    </div>
 
-      <div class="st-panel">
-        <h3>🧾 지출 기록</h3>
-        <form id="st-expense-form" autocomplete="off">
-          <div id="st-expense-fields"></div>
-          <button type="submit" class="st-btn full">지출 추가</button>
-        </form>
+    <div class="block">
+      <h3>📸 말발굽길 미리보기</h3>
+      <div class="carousel" id="day2-carousel">
+        <div class="carousel-track">
+          <div class="slide"><img src="assets/day2-carousel/slide-01.jpg" alt="05 말발굽길 코스 정보 - 총거리 12.2km, 걷는 시간 4시간 30분 내외, 난이도 ★★" loading="lazy"></div>
+          <div class="slide"><img src="assets/day2-carousel/slide-02.jpg" alt="말발굽길 구간별 거리 안내 - 적량마을부터 창선교 남단(지족)까지" loading="lazy"></div>
+          <div class="slide"><img src="assets/day2-carousel/slide-03.jpg" alt="힐링 포인트1 창선교, 적량마을에서 시작해 대곡과 장포를 지나는 코스 지도" loading="lazy"></div>
+          <div class="slide"><img src="assets/day2-carousel/slide-04.jpg" alt="힐링 포인트2 추섬공원, 고려시대 군마를 키우던 지역이라 말발굽길이라는 이름이 붙음" loading="lazy"></div>
+          <div class="slide"><img src="assets/day2-carousel/slide-05.jpg" alt="코스1 보현사, 숲길 사이 고즈넉한 쉼터" loading="lazy"></div>
+          <div class="slide"><img src="assets/day2-carousel/slide-06.jpg" alt="코스2 지족해협죽방렴, 남해 전통 어업 유산" loading="lazy"></div>
+          <div class="slide"><img src="assets/day2-carousel/slide-07.jpg" alt="잔잔한 바다와 포구 풍경" loading="lazy"></div>
+          <div class="slide"><img src="assets/day2-carousel/slide-08.jpg" alt="작은 어선이 머무는 포구와 창선면 마을길 풍경" loading="lazy"></div>
+          <div class="slide"><img src="assets/day2-carousel/slide-09.jpg" alt="푸른 바다를 따라 걷는 말발굽길 전경" loading="lazy"></div>
+          <div class="slide"><img src="assets/day2-carousel/slide-10.jpg" alt="숲길과 해안길이 번갈아 이어지는 구간 풍경" loading="lazy"></div>
+          <div class="slide"><img src="assets/day2-carousel/slide-11.jpg" alt="말발굽길의 탁 트인 바다 풍경을 배경으로 선 사람" loading="lazy"></div>
+          <div class="slide"><img src="assets/day2-carousel/slide-12.jpg" alt="걷는 동안 만나는 풍경과 이야기, 작은소풍 바래길 행사 안내" loading="lazy"></div>
+          <div class="slide"><img src="assets/day2-carousel/slide-13.jpg" alt="시작점 적량마을 안내, 바다와 마을을 잇는 말발굽길" loading="lazy"></div>
+        </div>
+        <button type="button" class="carousel-btn prev" aria-label="이전 사진">‹</button>
+        <button type="button" class="carousel-btn next" aria-label="다음 사진">›</button>
+        <div class="carousel-dots">
+          <button type="button" class="dot active" aria-label="1번 사진으로 이동" aria-current="true"></button>
+          <button type="button" class="dot" aria-label="2번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="3번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="4번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="5번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="6번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="7번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="8번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="9번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="10번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="11번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="12번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="13번 사진으로 이동" aria-current="false"></button>
+        </div>
       </div>
+    </div>
 
-      <div class="st-panel">
-        <h3>📒 기록 내역</h3>
-        <div id="st-expense-list"></div>
+    <div class="block">
+      <h3>🏠 숙소</h3>
+      <div class="lodge-card">
+        <img src="assets/lodge2.png" alt="파도가 머무는 정원">
+        <div class="lodge-info">
+          <div class="name">파도가 머무는 정원</div>
+          <span class="price">30만원 / 박</span>
+          <p>가인리 소재 · 별장식 민박 · 앞바다 수영/스노클링 가능</p>
+          <p>3명이 나눠서 결제</p>
+          <a href="https://naver.me/FvQ1jynR" target="_blank">네이버지도에서 보기 →</a><br>
+          <a href="https://m.cafe.naver.com/ca-fe/web/cafes/eemog/articles/118?useCafeId=false&tc" target="_blank">숙소 소개글 보기 →</a>
+        </div>
       </div>
-
-      <div class="st-panel">
-        <h3>📊 여행자별 정산</h3>
-        <div id="st-result"></div>
-      </div>
-    </section>
+    </div>
   </section>
 
-  <!-- 준비물 -->
-  <section id="memo" class="reveal">
-    <div class="sec-head">
-      <span class="dot" style="background:var(--terra)">🎒</span>
-      <div><h2>준비물 메모</h2><p>가볍게, 그러나 알차게</p></div>
+  <!-- DAY 3 -->
+  <section class="day">
+    <span class="day-label">DAY 3</span>
+    <h2>동대만길</h2>
+    <p class="desc">창선대교 단항검문소에서 출발해 창선면행정복지센터까지 15km를 걸어요.</p>
+    <p class="desc">아마도 더 걷겠죠?</p>
+    
+    <div class="block">
+      <h3>🚶 도보 코스 — 3코스 동대만길</h3>
+      <div class="course-card">
+        <img src="assets/map03.png" alt="03코스 동대만길 지도">
+        <div class="course-meta">
+          <div class="name">동대만길 (남파랑길 36코스)</div>
+          <table>
+            <tr><td>출발</td><td class="v">창선대교 단항검문소</td></tr>
+            <tr><td>도착</td><td class="v">창선면행정복지센터</td></tr>
+            <tr><td>총 거리</td><td class="v">15.0km</td></tr>
+            <tr><td>걷는 시간</td><td class="v">5시간 30분 내외</td></tr>
+            <tr><td>난이도</td><td class="v">★★★☆</td></tr>
+          </table>
+        </div>
+      </div>
     </div>
-    <div class="memo">
-      <ul>
-        <li>2일차 숙소 앞바다에서 수영 가능 — 물놀이 준비</li>
-        <li>출발 전 날씨 보고 우비.. (챙길 일 없길)</li>
-      </ul>
+
+    <div class="block">
+      <h3>📸 동대만길 미리보기</h3>
+      <div class="carousel" id="day3-carousel">
+        <div class="carousel-track">
+          <div class="slide"><img src="assets/day3-carousel/slide-01.jpg" alt="동대만길 소개 - 창선대교 단항검문소부터 창선면행정복지센터까지 구간별 거리 안내" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-02.jpg" alt="03 동대만길 코스 정보 - 총거리 15.0km, 걷는 시간 5시간 30분 내외, 난이도 ★★★" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-03.jpg" alt="인생샷 포인트1 창선대교" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-04.jpg" alt="인생샷 포인트2 대방산" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-05.jpg" alt="인생샷 포인트3 왕후박나무, 수령 500년 이상 천연기념물" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-06.jpg" alt="동대만 해안 마을 풍경" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-07.jpg" alt="동대만길을 따라 걷는 하늘과 숲 풍경" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-08.jpg" alt="동대만길 숲길 구간 전경" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-09.jpg" alt="바다 위 소초도 풍경" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-10.jpg" alt="시작점 창선대교 단항검문소 해안도로" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-11.jpg" alt="남해바래길탐방안내센터 인스타그램과 앱 QR코드 안내" loading="lazy"></div>
+        </div>
+        <button type="button" class="carousel-btn prev" aria-label="이전 사진">‹</button>
+        <button type="button" class="carousel-btn next" aria-label="다음 사진">›</button>
+        <div class="carousel-dots">
+          <button type="button" class="dot active" aria-label="1번 사진으로 이동" aria-current="true"></button>
+          <button type="button" class="dot" aria-label="2번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="3번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="4번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="5번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="6번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="7번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="8번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="9번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="10번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="11번 사진으로 이동" aria-current="false"></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
+      <h3>🚕 이동</h3>
+      <div class="taxi">
+        <div class="icon">🚕</div>
+        <div>
+          <b>창선면 → 1일차 숙소</b>
+          <span>도보 코스 완주 후 창선면에서 택시로 약 10분 이동해 첫째 날 숙소로 복귀합니다.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 참고: 숙소비 -->
+  <div class="cost-box">
+    <h2>🏠 숙소비 참고</h2>
+    <div class="cost-row">
+      <div>1일차 · 남해는, 지금<div class="who">기아 언니 포함 4인 분담</div></div>
+      <div>17만원</div>
+    </div>
+    <div class="cost-row">
+      <div>2일차 · 파도가 머무는 정원<div class="who">3인 분담</div></div>
+      <div>30만원</div>
+    </div>
+    <p class="who" style="margin-top:10px">👇 아래 ‘지출 &amp; 정산’에 여행자와 지출을 입력하면 자동으로 정산돼요.</p>
+  </div>
+
+  <!-- 지출 & 정산 (인터랙티브) -->
+  <section class="settle-box" id="settle">
+    <h2>💰 지출 &amp; 정산</h2>
+    <p class="intro">여행자를 등록하고, 걷다가 쓴 금액을 기록하면 마지막에 여행자별로 자동 정산돼요. 기록은 함께 공유돼서 누구나 같은 화면을 봅니다.</p>
+
+    <div class="st-status" id="st-status"></div>
+
+    <div class="st-panel">
+      <h3>🧑‍🤝‍🧑 여행자</h3>
+      <div class="st-chips" id="st-traveler-list"></div>
+      <form id="st-traveler-form" class="st-inline" autocomplete="off">
+        <label class="st-label">이름 추가
+          <input type="text" id="st-traveler-name" placeholder="예: 미솔" maxlength="40" required>
+        </label>
+        <button type="submit" class="st-btn">추가</button>
+      </form>
+    </div>
+
+    <div class="st-panel">
+      <h3>🧾 지출 기록</h3>
+      <form id="st-expense-form" autocomplete="off">
+        <div id="st-expense-fields"></div>
+        <button type="submit" class="st-btn full">지출 추가</button>
+      </form>
+    </div>
+
+    <div class="st-panel">
+      <h3>📒 기록 내역</h3>
+      <div id="st-expense-list"></div>
+    </div>
+
+    <div class="st-panel">
+      <h3>📊 여행자별 정산</h3>
+      <div id="st-result"></div>
+    </div>
+
+    <div class="st-panel">
+      <h3>🎒 준비물 메모</h3>
+      <p class="intro" style="margin:0 0 12px;font-size:13px;">여행자 누구나 준비물을 추가·수정·삭제할 수 있어요. 변경 내용은 모두에게 공유됩니다.</p>
+      <div id="st-note-list"></div>
+      <form id="st-note-form" class="st-inline" autocomplete="off">
+        <label class="st-label">준비물 추가
+          <input type="text" id="st-note-input" placeholder="예: 수영복 &amp; 스노클 챙기기" maxlength="200" required>
+        </label>
+        <button type="submit" class="st-btn">추가</button>
+      </form>
     </div>
   </section>
 
 </div>
 
 <footer>
-  <div class="paw">🐾</div>
-  남해 바래길 3일 도보여행 계획
+  남해 바래길 3일 도보여행 계획 🐾
 </footer>
 
 <script src="assets/carousel.js"></script>
@@ -601,12 +761,6 @@
   document.querySelectorAll('.carousel').forEach(function (el) {
     Carousel.initCarousel(el);
   });
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (en) {
-      if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); }
-    });
-  }, { threshold: 0.1 });
-  document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
 </script>
 
 </body>

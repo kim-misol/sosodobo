@@ -1,7 +1,7 @@
 /**
- * 지출 & 정산 UI.
+ * 지출 & 정산 + 준비물 메모 UI.
  *
- * 서버(/api/*)에서 여행자·지출 데이터를 불러오고, 정산 계산은 테스트된
+ * 서버(/api/*)에서 여행자·지출·준비물 데이터를 불러오고, 정산 계산은 테스트된
  * settle-core.js(window.Settle)로 처리합니다. 순수 계산 로직은 여기 두지 않아요.
  */
 (function () {
@@ -20,7 +20,15 @@
     });
   }
 
-  var state = { travelers: [], expenses: [], loading: true, error: null };
+  var state = {
+    travelers: [],
+    expenses: [],
+    notes: [],
+    loading: true,
+    error: null,
+    editingNoteId: null,     // 수정 중인 준비물 id
+    editingExpenseId: null,  // 수정 중인 지출 id
+  };
 
   var els = {
     root: null,
@@ -32,6 +40,9 @@
     expenseFields: null,
     expenseList: null,
     result: null,
+    noteList: null,
+    noteForm: null,
+    noteInput: null,
   };
 
   async function api(path, options) {
@@ -44,6 +55,14 @@
     return data;
   }
 
+  function jsonOpts(method, payload) {
+    return {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    };
+  }
+
   async function load() {
     state.loading = true;
     render();
@@ -51,6 +70,7 @@
       var data = await api('/state');
       state.travelers = data.travelers || [];
       state.expenses = data.expenses || [];
+      state.notes = data.notes || [];
       state.error = null;
     } catch (err) {
       state.error = err.message;
@@ -62,11 +82,7 @@
 
   // ---- 여행자 ----
   async function addTraveler(name) {
-    await api('/travelers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name }),
-    });
+    await api('/travelers', jsonOpts('POST', { name: name }));
     await load();
   }
 
@@ -79,11 +95,13 @@
 
   // ---- 지출 ----
   async function addExpense(payload) {
-    await api('/expenses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    await api('/expenses', jsonOpts('POST', payload));
+    await load();
+  }
+
+  async function updateExpense(id, payload) {
+    await api('/expenses?id=' + id, jsonOpts('PATCH', payload));
+    state.editingExpenseId = null;
     await load();
   }
 
@@ -93,10 +111,44 @@
     await load();
   }
 
+  // ---- 준비물 메모 ----
+  async function addNote(content) {
+    await api('/notes', jsonOpts('POST', { content: content }));
+    await load();
+  }
+
+  async function updateNote(id, content) {
+    await api('/notes?id=' + id, jsonOpts('PATCH', { content: content }));
+    state.editingNoteId = null;
+    await load();
+  }
+
+  async function deleteNote(id) {
+    if (!confirm('이 준비물 항목을 삭제할까요?')) return;
+    await api('/notes?id=' + id, { method: 'DELETE' });
+    await load();
+  }
+
   // ---- 렌더링 ----
   function nameOf(id) {
     var t = state.travelers.find(function (x) { return x.id === id; });
     return t ? t.name : '(삭제됨)';
+  }
+
+  function payerOptionsHtml(selectedId) {
+    return state.travelers.map(function (t) {
+      var sel = t.id === selectedId ? ' selected' : '';
+      return '<option value="' + t.id + '"' + sel + '>' + esc(t.name) + '</option>';
+    }).join('');
+  }
+
+  function participantChecksHtml(selectedIds, name) {
+    var set = {};
+    (selectedIds || []).forEach(function (id) { set[id] = true; });
+    return state.travelers.map(function (t) {
+      var checked = set[t.id] ? ' checked' : '';
+      return '<label class="st-check"><input type="checkbox" name="' + name + '" value="' + t.id + '"' + checked + '> ' + esc(t.name) + '</label>';
+    }).join('');
   }
 
   function renderTravelers() {
@@ -117,12 +169,8 @@
       return;
     }
     els.expenseForm.querySelector('button[type="submit"]').disabled = false;
-    var payerOptions = state.travelers.map(function (t) {
-      return '<option value="' + t.id + '">' + esc(t.name) + '</option>';
-    }).join('');
-    var checks = state.travelers.map(function (t) {
-      return '<label class="st-check"><input type="checkbox" name="participant" value="' + t.id + '" checked> ' + esc(t.name) + '</label>';
-    }).join('');
+    var payerOptions = payerOptionsHtml(null);
+    var checks = participantChecksHtml(state.travelers.map(function (t) { return t.id; }), 'participant');
 
     els.expenseFields.innerHTML =
       '<label class="st-label">지출 내용' +
@@ -134,8 +182,50 @@
         '<select name="payer" required>' + payerOptions + '</select></label>' +
       '</div>' +
       '<div class="st-label">함께 정산할 사람 (선택한 인원끼리 1/N)' +
-        '<div class="st-checks"><button type="button" class="st-linkbtn" data-toggle-all>전체 선택/해제</button>' + checks + '</div>' +
+        '<div class="st-checks"><button type="button" class="st-linkbtn" data-toggle-all="participant">전체 선택/해제</button>' + checks + '</div>' +
       '</div>';
+  }
+
+  // 지출 한 건을 '보기' 모드로 렌더
+  function expenseRowHtml(e) {
+    var who = e.participantIds.map(nameOf).join(', ');
+    var perName = e.participantIds.length
+      ? ' · 1인 ' + won(Math.floor(e.amount / e.participantIds.length))
+      : '';
+    return '<div class="st-exp">' +
+      '<div class="st-exp-main">' +
+        '<div class="st-exp-desc">' + esc(e.description) + '</div>' +
+        '<div class="st-exp-sub">💳 ' + esc(nameOf(e.payerId)) + ' 결제 · 👥 ' + esc(who) + perName + '</div>' +
+      '</div>' +
+      '<div class="st-exp-amt">' + won(e.amount) +
+        '<button type="button" class="st-iconbtn" data-edit-expense="' + e.id + '" aria-label="지출 수정">✎</button>' +
+        '<button type="button" class="st-chip-x" data-del-expense="' + e.id + '" aria-label="지출 삭제">×</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // 지출 한 건을 '수정' 모드로 렌더 (인라인 편집 폼)
+  function expenseEditHtml(e) {
+    return '<div class="st-exp editing">' +
+      '<div class="st-exp-edit">' +
+        '<label class="st-label">지출 내용' +
+        '<input type="text" class="st-e-desc" maxlength="60" value="' + esc(e.description) + '"></label>' +
+        '<div class="st-row2">' +
+          '<label class="st-label">금액(원)' +
+          '<input type="number" class="st-e-amount" inputmode="numeric" min="1" step="1" value="' + e.amount + '"></label>' +
+          '<label class="st-label">결제자' +
+          '<select class="st-e-payer">' + payerOptionsHtml(e.payerId) + '</select></label>' +
+        '</div>' +
+        '<div class="st-label">함께 정산할 사람' +
+          '<div class="st-checks"><button type="button" class="st-linkbtn" data-toggle-all="edit-participant">전체 선택/해제</button>' +
+            participantChecksHtml(e.participantIds, 'edit-participant') + '</div>' +
+        '</div>' +
+        '<div class="st-edit-actions">' +
+          '<button type="button" class="st-btn sm" data-save-expense="' + e.id + '">저장</button>' +
+          '<button type="button" class="st-linkbtn" data-cancel-edit>취소</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
   }
 
   function renderExpenseList() {
@@ -144,17 +234,30 @@
       return;
     }
     els.expenseList.innerHTML = state.expenses.map(function (e) {
-      var who = e.participantIds.map(nameOf).join(', ');
-      var perName = e.participantIds.length
-        ? ' · 1인 ' + won(Math.floor(e.amount / e.participantIds.length))
-        : '';
-      return '<div class="st-exp">' +
-        '<div class="st-exp-main">' +
-          '<div class="st-exp-desc">' + esc(e.description) + '</div>' +
-          '<div class="st-exp-sub">💳 ' + esc(nameOf(e.payerId)) + ' 결제 · 👥 ' + esc(who) + perName + '</div>' +
-        '</div>' +
-        '<div class="st-exp-amt">' + won(e.amount) +
-          '<button type="button" class="st-chip-x" data-del-expense="' + e.id + '" aria-label="지출 삭제">×</button>' +
+      return e.id === state.editingExpenseId ? expenseEditHtml(e) : expenseRowHtml(e);
+    }).join('');
+  }
+
+  function renderNotes() {
+    if (state.notes.length === 0) {
+      els.noteList.innerHTML = '<p class="st-empty">아직 준비물이 없어요. 아래에서 추가해 주세요.</p>';
+      return;
+    }
+    els.noteList.innerHTML = state.notes.map(function (n) {
+      if (n.id === state.editingNoteId) {
+        return '<div class="st-note editing">' +
+          '<input type="text" class="st-note-input" data-note-input="' + n.id + '" maxlength="200" value="' + esc(n.content) + '">' +
+          '<div class="st-note-actions">' +
+            '<button type="button" class="st-btn sm" data-save-note="' + n.id + '">저장</button>' +
+            '<button type="button" class="st-linkbtn" data-cancel-edit>취소</button>' +
+          '</div>' +
+        '</div>';
+      }
+      return '<div class="st-note">' +
+        '<div class="st-note-text">' + esc(n.content) + '</div>' +
+        '<div class="st-note-actions">' +
+          '<button type="button" class="st-iconbtn" data-edit-note="' + n.id + '" aria-label="수정">✎</button>' +
+          '<button type="button" class="st-chip-x" data-del-note="' + n.id + '" aria-label="삭제">×</button>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -175,7 +278,7 @@
         : (b.net < 0 ? (won(-b.net) + ' 낼 돈') : '정산 완료');
       return '<div class="st-bal">' +
         '<div class="st-bal-name">' + esc(b.name) + '</div>' +
-        '<div class="st-bal-detail">낸 돈 ' + won(b.paid) + ' · 쓸 몫 ' + won(b.owed) + '</div>' +
+        '<div class="st-bal-detail">지출 ' + won(b.paid) + ' · 몫 ' + won(b.owed) + '</div>' +
         '<div class="st-bal-net ' + cls + '">' + label + '</div>' +
       '</div>';
     }).join('');
@@ -212,7 +315,34 @@
     renderTravelers();
     renderExpenseForm();
     renderExpenseList();
+    renderNotes();
     renderResult();
+  }
+
+  // 수정 모드에서 지출 편집 폼 값을 읽어옵니다.
+  function readExpenseEdit() {
+    var box = els.expenseList;
+    var descEl = box.querySelector('.st-e-desc');
+    var amountEl = box.querySelector('.st-e-amount');
+    var payerEl = box.querySelector('.st-e-payer');
+    if (!descEl || !amountEl || !payerEl) return null;
+    var participants = Array.prototype.slice
+      .call(box.querySelectorAll('input[name="edit-participant"]:checked'))
+      .map(function (c) { return parseInt(c.value, 10); });
+    return {
+      description: descEl.value.trim(),
+      amount: parseInt(amountEl.value, 10),
+      payerId: parseInt(payerEl.value, 10),
+      participantIds: participants,
+    };
+  }
+
+  function saveNoteFrom(id) {
+    var input = els.noteList.querySelector('[data-note-input="' + id + '"]');
+    if (!input) return;
+    var content = input.value.trim();
+    if (!content) { alert('준비물 내용을 입력해 주세요.'); return; }
+    updateNote(id, content).catch(function (e) { alert(e.message); });
   }
 
   function bind() {
@@ -245,19 +375,69 @@
       }).catch(function (e) { alert(e.message); });
     });
 
-    // 이벤트 위임: 삭제/토글/재시도 버튼
+    els.noteForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var content = els.noteInput.value.trim();
+      if (!content) return;
+      els.noteInput.value = '';
+      addNote(content).catch(function (e) { alert(e.message); });
+    });
+
+    // 이벤트 위임: 각종 버튼 클릭
     els.root.addEventListener('click', function (ev) {
       var el = ev.target;
+      var attr = function (name) { return el.getAttribute(name); };
+
       if (el.hasAttribute('data-del-traveler')) {
-        deleteTraveler(parseInt(el.getAttribute('data-del-traveler'), 10)).catch(function (e) { alert(e.message); });
+        deleteTraveler(parseInt(attr('data-del-traveler'), 10)).catch(function (e) { alert(e.message); });
+
       } else if (el.hasAttribute('data-del-expense')) {
-        deleteExpense(parseInt(el.getAttribute('data-del-expense'), 10)).catch(function (e) { alert(e.message); });
+        deleteExpense(parseInt(attr('data-del-expense'), 10)).catch(function (e) { alert(e.message); });
+      } else if (el.hasAttribute('data-edit-expense')) {
+        state.editingExpenseId = parseInt(attr('data-edit-expense'), 10);
+        render();
+      } else if (el.hasAttribute('data-save-expense')) {
+        var payload = readExpenseEdit();
+        if (!payload) return;
+        if (!payload.description) { alert('지출 내용을 입력해 주세요.'); return; }
+        if (!(payload.amount > 0)) { alert('금액을 올바르게 입력해 주세요.'); return; }
+        if (payload.participantIds.length === 0) { alert('정산에 참여할 사람을 한 명 이상 선택해 주세요.'); return; }
+        updateExpense(parseInt(attr('data-save-expense'), 10), payload).catch(function (e) { alert(e.message); });
+
+      } else if (el.hasAttribute('data-edit-note')) {
+        state.editingNoteId = parseInt(attr('data-edit-note'), 10);
+        render();
+        var input = els.noteList.querySelector('[data-note-input]');
+        if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+      } else if (el.hasAttribute('data-save-note')) {
+        saveNoteFrom(parseInt(attr('data-save-note'), 10));
+      } else if (el.hasAttribute('data-del-note')) {
+        deleteNote(parseInt(attr('data-del-note'), 10)).catch(function (e) { alert(e.message); });
+
+      } else if (el.hasAttribute('data-cancel-edit')) {
+        state.editingNoteId = null;
+        state.editingExpenseId = null;
+        render();
       } else if (el.hasAttribute('data-retry')) {
         load();
       } else if (el.hasAttribute('data-toggle-all')) {
-        var boxes = els.expenseForm.querySelectorAll('input[name="participant"]');
+        var group = attr('data-toggle-all');
+        var boxes = els.root.querySelectorAll('input[name="' + group + '"]');
         var anyUnchecked = Array.prototype.some.call(boxes, function (b) { return !b.checked; });
         Array.prototype.forEach.call(boxes, function (b) { b.checked = anyUnchecked; });
+      }
+    });
+
+    // 준비물 수정 입력창에서 Enter → 저장, Esc → 취소
+    els.root.addEventListener('keydown', function (ev) {
+      var el = ev.target;
+      if (!el.hasAttribute || !el.hasAttribute('data-note-input')) return;
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        saveNoteFrom(parseInt(el.getAttribute('data-note-input'), 10));
+      } else if (ev.key === 'Escape') {
+        state.editingNoteId = null;
+        render();
       }
     });
   }
@@ -273,6 +453,9 @@
     els.expenseFields = $('#st-expense-fields', els.root);
     els.expenseList = $('#st-expense-list', els.root);
     els.result = $('#st-result', els.root);
+    els.noteList = $('#st-note-list', els.root);
+    els.noteForm = $('#st-note-form', els.root);
+    els.noteInput = $('#st-note-input', els.root);
     bind();
     load();
   }

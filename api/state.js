@@ -14,6 +14,9 @@ module.exports = async function handler(req, res) {
     const travelersResult = await sql`
       SELECT id, name FROM travelers ORDER BY id ASC`;
 
+    const notesResult = await sql`
+      SELECT id, content FROM notes ORDER BY id ASC`;
+
     const expensesResult = await sql`
       SELECT e.id, e.description, e.amount, e.payer_id, e.created_at,
              COALESCE(
@@ -37,6 +40,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       travelers: travelersResult.rows.map((r) => ({ id: r.id, name: r.name })),
       expenses,
+      notes: notesResult.rows.map((r) => ({ id: r.id, content: r.content })),
     });
   } catch (err) {
     return sendError(res, err);

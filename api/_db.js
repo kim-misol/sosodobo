@@ -27,6 +27,32 @@ async function ensureSchema() {
         traveler_id INTEGER NOT NULL REFERENCES travelers(id) ON DELETE CASCADE,
         PRIMARY KEY (expense_id, traveler_id)
       )`;
+      // 준비물 메모: 여행자들이 직접 추가/수정/삭제하는 항목.
+      await sql`CREATE TABLE IF NOT EXISTS notes (
+        id SERIAL PRIMARY KEY,
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`;
+      // 최초 1회 시드 여부 등을 기록하는 작은 메타 테이블.
+      await sql`CREATE TABLE IF NOT EXISTS app_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      )`;
+      // 기존 준비물 항목은 최초 1회만 채워 넣습니다.
+      // (사용자가 나중에 전부 지워도 다시 생기지 않도록 플래그로 제어)
+      const seeded = await sql`SELECT 1 FROM app_meta WHERE key = 'notes_seeded'`;
+      if (seeded.rowCount === 0) {
+        const defaults = [
+          '2일차 숙소 앞바다에서 수영 가능 — 수영복 & 스노클 챙기기',
+          '연휴 기간이라 숙소 예약이 빨리 마감되니 일정 변동 시 미리 공유하기',
+          '가방은 최대한 가볍게, 그 대신 체력은 미리 만들어두기 ㅋㅋ',
+          '고사리밭길 사전예약 필요 여부 다시 한 번 확인',
+        ];
+        for (const c of defaults) {
+          await sql`INSERT INTO notes (content) VALUES (${c})`;
+        }
+        await sql`INSERT INTO app_meta (key, value) VALUES ('notes_seeded', 'true')`;
+      }
     })().catch((err) => {
       // 실패하면 다음 요청에서 다시 시도할 수 있게 캐시를 비웁니다.
       schemaReady = null;
