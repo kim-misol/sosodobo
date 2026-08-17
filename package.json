@@ -1,8 +1,11 @@
 {
   "name": "sosodobo",
   "private": true,
-  "description": "남해 바래길 3일 도보여행 계획 페이지",
+  "description": "남해 바래길 3일 도보여행 계획 + 지출 정산 페이지",
   "scripts": {
     "test": "node --test"
+  },
+  "dependencies": {
+    "@vercel/postgres": "^0.10.0"
   }
 }

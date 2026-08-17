@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>남해 바래길 3일 도보여행 · TRAIL/03</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#12201a;
+    --bg:#f7f6f1;
+    --card:#ffffff;
+    --green:#1f6e4a;
+    --green-deep:#123b28;
+    --sky:#2f7ea6;
+    --sun:#e0912e;
+    --line:#dcd8ca;
+    --sub:#6b7268;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Noto Sans KR",-apple-system,BlinkMacSystemFont,sans-serif;
+    line-height:1.6;
+  }
+  .mono{font-family:"Space Mono",monospace;}
+  img{max-width:100%; display:block;}
+  a{color:inherit;}
+  ::selection{background:var(--green); color:#fff;}
+
+  /* topographic bg */
+  .topo{
+    position:fixed; inset:0; z-index:0; opacity:.55; pointer-events:none;
+    background-image:
+      radial-gradient(circle at 20% 20%, transparent 0 60px, rgba(31,110,74,.05) 61px, transparent 62px),
+      repeating-radial-gradient(circle at 15% 10%, transparent 0 40px, rgba(31,110,74,.045) 41px, transparent 82px),
+      repeating-radial-gradient(circle at 90% 80%, transparent 0 55px, rgba(47,126,166,.05) 56px, transparent 112px);
+    background-size: 100% 100%;
+  }
+
+  /* nav */
+  nav{
+    position:sticky; top:0; z-index:80; background:rgba(247,246,241,.88); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav-inner{
+    max-width:1100px; margin:0 auto; padding:14px 20px; display:flex; align-items:center;
+    justify-content:space-between; gap:16px;
+  }
+  .brand{font-weight:900; font-size:15px; letter-spacing:.02em; display:flex; align-items:center; gap:8px;}
+  .brand .dot{width:9px; height:9px; border-radius:50%; background:var(--green);}
+  .tabs{display:flex; gap:4px; overflow-x:auto; scrollbar-width:none;}
+  .tabs::-webkit-scrollbar{display:none;}
+  .tabs button{
+    border:none; background:transparent; font-family:inherit; font-size:12.5px; font-weight:700;
+    color:var(--sub); padding:8px 13px; border-radius:999px; cursor:pointer; white-space:nowrap; transition:.2s;
+  }
+  .tabs button.active{background:var(--green); color:#fff;}
+  .tabs button:not(.active):hover{background:#e9e6da;}
+
+  /* hero */
+  header.hero{position:relative; z-index:1; padding:70px 20px 40px; max-width:1100px; margin:0 auto;}
+  .hero-grid{display:grid; grid-template-columns:1fr; gap:34px; align-items:end;}
+  @media(min-width:900px){ .hero-grid{grid-template-columns:1.15fr .85fr;} }
+  .hero-label{
+    display:inline-flex; align-items:center; gap:8px; font-size:12px; letter-spacing:.14em;
+    color:var(--green); font-weight:700; margin-bottom:18px;
+  }
+  .hero-label::before{content:''; width:26px; height:2px; background:var(--green); display:inline-block;}
+  header.hero h1{
+    font-size:clamp(34px,6.4vw,64px); font-weight:900; line-height:1.08; margin:0 0 20px; letter-spacing:-.01em;
+  }
+  header.hero h1 em{font-style:normal; color:var(--green);}
+  header.hero p{color:var(--sub); font-size:15.5px; max-width:440px; margin:0 0 26px;}
+  .cta-row{display:flex; gap:10px; flex-wrap:wrap;}
+  .cta{
+    display:inline-flex; align-items:center; gap:8px; background:var(--ink); color:#fff; border:none;
+    padding:13px 22px; border-radius:999px; font-weight:700; font-size:13.5px; cursor:pointer; text-decoration:none;
+    transition:transform .2s, background .2s;
+  }
+  .cta:hover{transform:translateY(-2px); background:var(--green-deep);}
+  .cta.ghost{background:transparent; color:var(--ink); border:1.5px solid var(--ink);}
+
+  .stat-card{
+    background:var(--card); border:1px solid var(--line); border-radius:22px; padding:26px;
+    display:grid; grid-template-columns:1fr 1fr; gap:20px;
+  }
+  .stat-card div b{
+    display:block; font-size:30px; font-weight:900; font-family:"Space Mono",monospace; color:var(--green-deep);
+  }
+  .stat-card div span{font-size:11.5px; color:var(--sub); letter-spacing:.04em;}
+
+  .hero-photo{
+    margin-top:34px; border-radius:26px; overflow:hidden; position:relative; aspect-ratio:16/8;
+  }
+  .hero-photo img{width:100%; height:100%; object-fit:cover; transform:scale(1.05); transition:transform 8s ease;}
+  .hero-photo:hover img{transform:scale(1);}
+  .hero-photo .cap{
+    position:absolute; left:18px; bottom:16px; color:#fff; font-size:12.5px; background:rgba(18,32,26,.55);
+    padding:6px 14px; border-radius:999px; backdrop-filter:blur(3px);
+  }
+
+  .section-wrap{position:relative; z-index:1; max-width:1100px; margin:0 auto; padding:70px 20px;}
+  .sec-head{display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:34px; flex-wrap:wrap;}
+  .sec-head .idx{font-family:"Space Mono",monospace; font-size:13px; color:var(--green); font-weight:700; margin-bottom:8px;}
+  .sec-head h2{font-size:clamp(24px,3.4vw,34px); margin:0; font-weight:900; letter-spacing:-.01em;}
+  .sec-head p{color:var(--sub); font-size:14px; max-width:360px; margin:6px 0 0;}
+  .sec-meta{font-family:"Space Mono",monospace; font-size:12px; color:var(--sub); text-align:right;}
+
+  .reveal{opacity:0; transform:translateY(24px); transition:opacity .6s ease, transform .6s ease;}
+  .reveal.in{opacity:1; transform:translateY(0);}
+
+  .cards{display:grid; grid-template-columns:1fr; gap:18px;}
+  @media(min-width:760px){ .cards.cols-2{grid-template-columns:1fr 1fr;} }
+
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:20px; overflow:hidden;
+    transition:transform .3s ease, box-shadow .3s ease;
+  }
+  .card:hover{transform:translateY(-5px); box-shadow:0 20px 40px rgba(18,32,26,.1);}
+  .card .ph{overflow:hidden; position:relative;}
+  .card .ph img{width:100%; height:220px; object-fit:cover; transition:transform .5s ease;}
+  .card:hover .ph img{transform:scale(1.06);}
+  .card .ph .badge{
+    position:absolute; top:12px; left:12px; background:rgba(18,32,26,.72); color:#fff; font-size:11px;
+    font-weight:700; padding:5px 11px; border-radius:999px; backdrop-filter:blur(2px);
+  }
+  .card .cb{padding:20px 22px 22px;}
+  .card h3{margin:0 0 12px; font-size:17.5px; font-weight:800;}
+  .meta-list{display:flex; flex-direction:column; gap:7px; margin-bottom:6px;}
+  .meta-list .row{display:flex; justify-content:space-between; font-size:13px; border-bottom:1px dotted var(--line); padding-bottom:6px;}
+  .meta-list .row span:first-child{color:var(--sub);}
+  .meta-list .row span:last-child{font-weight:700;}
+  .difficulty{display:flex; gap:4px; margin-top:6px;}
+  .difficulty i{width:22px; height:6px; border-radius:3px; background:#e7e3d5;}
+  .difficulty i.on{background:var(--sun);}
+  .note{margin-top:12px; background:#fdf1de; border:1px solid #f0d8ac; color:#8a5a1f; font-size:12px; padding:9px 12px; border-radius:12px;}
+
+  .lodge-card{display:grid; grid-template-columns:1fr; }
+  @media(min-width:560px){ .lodge-card{grid-template-columns:180px 1fr;} }
+  .lodge-card .ph img{height:100%; min-height:170px;}
+  .price-tag{display:inline-block; background:var(--green); color:#fff; font-size:12px; font-weight:800; padding:4px 12px; border-radius:999px; margin-bottom:8px;}
+  .lodge-card p{margin:4px 0; font-size:13px; color:var(--sub);}
+  .lodge-card .links{margin-top:10px; display:flex; gap:14px; flex-wrap:wrap;}
+  .lodge-card .links a{font-size:12.5px; font-weight:800; color:var(--green-deep); text-decoration:none; border-bottom:2px solid var(--green);}
+
+  /* carousel */
+  .carousel{position:relative; border-radius:20px; overflow:hidden; border:1px solid var(--line);}
+  .carousel-track{display:flex; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
+  .carousel-track::-webkit-scrollbar{display:none;}
+  .carousel-track .slide{flex:0 0 100%; scroll-snap-align:center;}
+  .carousel-track img{width:100%; max-height:440px; object-fit:cover;}
+  .carousel-btn{
+    position:absolute; top:50%; transform:translateY(-50%); width:40px; height:40px; border-radius:50%;
+    border:none; background:#fff; color:var(--ink); font-size:19px; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.18);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .carousel-btn.prev{left:14px;} .carousel-btn.next{right:14px;}
+  .carousel-progress{height:3px; background:var(--line);}
+  .carousel-progress-fill{height:100%; background:var(--green); width:9.09%; transition:width .3s ease;}
+  .carousel-count{
+    position:absolute; right:14px; top:14px; background:rgba(18,32,26,.65); color:#fff; font-family:"Space Mono",monospace;
+    font-size:11.5px; padding:5px 10px; border-radius:999px;
+  }
+
+  .taxi{margin-top:20px; display:flex; gap:14px; align-items:flex-start; background:#eaf3ee; border:1px solid #cfe4d8; border-radius:16px; padding:16px 18px;}
+  .taxi .icon{font-size:22px;}
+  .taxi b{display:block; font-size:14px; margin-bottom:3px;}
+  .taxi span{font-size:13px; color:var(--sub);}
+
+  /* cost chart */
+  .cost-grid{display:grid; grid-template-columns:1fr; gap:16px;}
+  @media(min-width:700px){ .cost-grid{grid-template-columns:1fr 1fr;} }
+  .cost-card{background:var(--card); border:1px solid var(--line); border-radius:20px; padding:22px 24px;}
+  .cost-card .top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;}
+  .cost-card .top b{font-size:15.5px;}
+  .cost-card .top span{font-family:"Space Mono",monospace; font-weight:700; font-size:16px; color:var(--green-deep);}
+  .cost-card .who{font-size:12.5px; color:var(--sub); margin-bottom:12px;}
+  .chip-row{display:flex; gap:6px; flex-wrap:wrap;}
+  .chip{
+    font-family:"Space Mono",monospace; font-size:11.5px; background:#eef3ec; border:1px solid #d6e4dc; color:var(--green-deep);
+    padding:5px 10px; border-radius:8px; opacity:0; transform:scale(.8); transition:opacity .35s, transform .35s;
+  }
+  .chip.in{opacity:1; transform:scale(1);}
+
+  /* packing */
+  .pack-wrap{display:grid; grid-template-columns:1fr; gap:22px;}
+  @media(min-width:760px){ .pack-wrap{grid-template-columns:220px 1fr; align-items:center;} }
+  .ring-box{display:flex; flex-direction:column; align-items:center; gap:10px;}
+  .ring{width:150px; height:150px;}
+  .ring circle{fill:none; stroke-width:11;}
+  .ring .bg{stroke:#e7e3d5;}
+  .ring .fg{stroke:var(--green); stroke-linecap:round; transform:rotate(-90deg); transform-origin:50% 50%; transition:stroke-dashoffset .5s ease;}
+  .ring-label{font-family:"Space Mono",monospace; font-size:22px; font-weight:700; fill:var(--ink);}
+  .pack-list{display:flex; flex-direction:column; gap:2px;}
+  .check-item{display:flex; align-items:flex-start; gap:11px; padding:10px 0; font-size:13.5px; color:var(--sub); cursor:pointer; border-bottom:1px solid var(--line);}
+  .check-item:last-child{border-bottom:none;}
+  .check-item .box{width:20px; height:20px; border-radius:6px; border:2px solid var(--green); flex-shrink:0; margin-top:1px; display:flex; align-items:center; justify-content:center; transition:.2s;}
+  .check-item.done .box{background:var(--green); border-color:var(--green);}
+  .check-item.done .box::after{content:'✓'; color:#fff; font-size:12px; font-weight:900;}
+  .check-item.done span.txt{text-decoration:line-through; opacity:.5;}
+
+  footer{position:relative; z-index:1; text-align:center; color:var(--sub); font-size:12.5px; padding:60px 20px 50px; border-top:1px solid var(--line); margin-top:30px;}
+</style>
+</head>
+<body>
+<div class="topo"></div>
+
+<nav>
+  <div class="nav-inner">
+    <div class="brand"><span class="dot"></span>SOSODOBO / TRAIL·03</div>
+    <div class="tabs" id="tabs">
+      <button data-target="top" class="active">개요</button>
+      <button data-target="day1">DAY 1</button>
+      <button data-target="day2">DAY 2</button>
+      <button data-target="day3">DAY 3</button>
+      <button data-target="cost">정산</button>
+      <button data-target="pack">준비물</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero-grid">
+    <div>
+      <div class="hero-label">NAMHAE BARAE-GIL</div>
+      <h1>남해 바래길을<br><em>3일간</em> 걷는 법</h1>
+      <p>창선면 해안선을 따라 걷는 32.5km. 지도, 숙소, 사진, 정산까지 — 이번 여행의 모든 정보를 한 페이지에 담았어요.</p>
+      <div class="cta-row">
+        <a class="cta" href="#day1">여정 시작하기 →</a>
+        <a class="cta ghost" href="#cost">정산 바로가기</a>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div><b data-count="3">0</b><span>DAYS ON TRAIL</span></div>
+      <div><b data-count="32.5" data-decimal="1">0</b><span>TOTAL KM</span></div>
+      <div><b data-count="2">0</b><span>LODGES</span></div>
+      <div><b data-count="4">0</b><span>ROUTE SEGMENTS</span></div>
+    </div>
+  </div>
+  <div class="hero-photo reveal">
+    <img src="assets/day3-carousel/slide-05.jpg" alt="왕후박나무">
+    <div class="cap">📍 동대만길 · 왕후박나무, 수령 500년</div>
+  </div>
+</header>
+
+<div class="section-wrap" id="day1">
+  <div class="sec-head reveal">
+    <div>
+      <div class="idx">01 / ARRIVAL</div>
+      <h2>도착 &amp; 첫째 날 숙소</h2>
+      <p>이동 후 숙소에서 여장을 풀고 첫째 날 밤을 보내요.</p>
+    </div>
+    <div class="sec-meta mono">DAY 01<br>REST</div>
+  </div>
+  <div class="cards">
+    <div class="card lodge-card reveal">
+      <div class="ph"><span class="badge">🏠 LODGE</span><img src="assets/lodge1.png" alt="남해는, 지금"></div>
+      <div class="cb">
+        <h3>남해는, 지금</h3>
+        <span class="price-tag">17만원 / 박</span>
+        <p>4명이 나눠서 결제</p>
+        <div class="links"><a href="https://naver.me/5V8TldZP" target="_blank">네이버지도에서 보기 →</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section-wrap" id="day2">
+  <div class="sec-head reveal">
+    <div>
+      <div class="idx">02 / HORSESHOE + FERN</div>
+      <h2>말발굽길 + 고사리밭길 일부</h2>
+      <p>적량마을에서 출발해 가인리까지, 총 약 17.5km를 걸어요.</p>
+    </div>
+    <div class="sec-meta mono">DAY 02<br>17.5 KM</div>
+  </div>
+
+  <div class="cards cols-2">
+    <div class="card reveal">
+      <div class="ph"><span class="badge">COURSE 01</span><img src="assets/map05.png" alt="05코스 말발굽길 지도"></div>
+      <div class="cb">
+        <h3>말발굽길 · 남파랑길 38코스</h3>
+        <div class="meta-list">
+          <div class="row"><span>시작점</span><span>적량마을</span></div>
+          <div class="row"><span>총 거리</span><span>11.9km</span></div>
+          <div class="row"><span>걷는 시간</span><span>4시간 30분</span></div>
+        </div>
+        <div>난이도<div class="difficulty"><i class="on"></i><i class="on"></i><i></i><i></i></div></div>
+      </div>
+    </div>
+    <div class="card reveal">
+      <div class="ph"><span class="badge">COURSE 02</span><img src="assets/map04.png" alt="04코스 고사리밭길 지도"></div>
+      <div class="cb">
+        <h3>고사리밭길 · 남파랑길 37코스</h3>
+        <div class="meta-list">
+          <div class="row"><span>전체 시작점</span><span>창선면행정복지센터</span></div>
+          <div class="row"><span>전체 거리</span><span>14.9km (오늘은 가인리까지)</span></div>
+        </div>
+        <div>난이도<div class="difficulty"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div></div>
+        <div class="note">⚠️ 3~6월 사전예약제 — 예약 여부 미리 확인!</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cards" style="margin-top:18px;">
+    <div class="card lodge-card reveal">
+      <div class="ph"><span class="badge">🏠 LODGE</span><img src="assets/lodge2.png" alt="파도가 머무는 정원"></div>
+      <div class="cb">
+        <h3>파도가 머무는 정원</h3>
+        <span class="price-tag">30만원 / 박</span>
+        <p>가인리 소재 · 별장식 민박 · 앞바다 수영/스노클링 가능</p>
+        <p>3명이 나눠서 결제</p>
+        <div class="links">
+          <a href="https://naver.me/FvQ1jynR" target="_blank">네이버지도에서 보기 →</a>
+          <a href="https://m.cafe.naver.com/ca-fe/web/cafes/eemog/articles/118?useCafeId=false&tc" target="_blank">숙소 소개글 →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section-wrap" id="day3">
+  <div class="sec-head reveal">
+    <div>
+      <div class="idx">03 / DONGDAEMAN-GIL</div>
+      <h2>동대만길</h2>
+      <p>창선대교 단항검문소에서 출발해 창선면행정복지센터까지 15km를 걸어요.</p>
+    </div>
+    <div class="sec-meta mono">DAY 03<br>15.0 KM</div>
+  </div>
+
+  <div class="card reveal" style="margin-bottom:18px;">
+    <div class="ph"><span class="badge">COURSE · 36</span><img src="assets/map03.png" alt="03코스 동대만길 지도"></div>
+    <div class="cb">
+      <h3>동대만길 · 남파랑길 36코스</h3>
+      <div class="meta-list">
+        <div class="row"><span>출발</span><span>창선대교 단항검문소</span></div>
+        <div class="row"><span>도착</span><span>창선면행정복지센터</span></div>
+        <div class="row"><span>걷는 시간</span><span>5시간 30분</span></div>
+      </div>
+      <div>난이도<div class="difficulty"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div></div>
+    </div>
+  </div>
+
+  <div class="reveal">
+    <div class="carousel" id="day3-carousel">
+      <div class="carousel-track">
+        <div class="slide"><img src="assets/day3-carousel/slide-01.jpg" alt="동대만길 소개 - 구간별 거리 안내" loading="lazy"></div>
+        <div class="slide"><img src="assets/day3-carousel/slide-02.jpg" alt="03 동대만길 코스 정보" loading="lazy"></div>
+        <div class="slide"><img src="assets/day3-carousel/slide-03.jpg" alt="인생샷 포인트1 창선대교" loading="lazy"></div>
+        <div class="slide"><img src="assets/day3-carousel/slide-04.jpg" alt="인생샷 포인트2 대방산" loading="lazy"></div>
+        <div class="slide"><img src="assets/day3-carousel/slide-05.jpg" alt="인생샷 포인트3 왕후박나무" loading="lazy"></div>
+        <div class="slide"><img src="assets/day3-carousel/slide-06.jpg" alt="동대만 해안 마을 풍경" loading="lazy"></div>
+        <div class="slide"><img src="assets/day3-carousel/slide-07.jpg" alt="동대만길 하늘과 숲 풍경" loading="lazy"></div>
+        <div class="slide"><img src="assets/day3-carousel/slide-08.jpg" alt="동대만길 숲길 구간 전경" loading="lazy"></div>
+        <div class="slide"><img src="assets/day3-carousel/slide-09.jpg" alt="바다 위 소초도 풍경" loading="lazy"></div>
+        <div class="slide"><img src="assets/day3-carousel/slide-10.jpg" alt="시작점 창선대교 단항검문소 해안도로" loading="lazy"></div>
+        <div class="slide"><img src="assets/day3-carousel/slide-11.jpg" alt="남해바래길탐방안내센터 안내" loading="lazy"></div>
+      </div>
+      <div class="carousel-count mono">01 / 11</div>
+      <button type="button" class="carousel-btn prev" aria-label="이전 사진">‹</button>
+      <button type="button" class="carousel-btn next" aria-label="다음 사진">›</button>
+      <div class="carousel-progress"><div class="carousel-progress-fill"></div></div>
+    </div>
+  </div>
+
+  <div class="taxi reveal">
+    <div class="icon">🚕</div>
+    <div><b>창선면 → 1일차 숙소</b><span>도보 코스 완주 후 창선면에서 택시로 약 10분 이동해 첫째 날 숙소로 복귀합니다.</span></div>
+  </div>
+</div>
+
+<div class="section-wrap" id="cost">
+  <div class="sec-head reveal">
+    <div><div class="idx">04 / SETTLEMENT</div><h2>숙소비 정산</h2></div>
+  </div>
+  <div class="cost-grid">
+    <div class="cost-card reveal">
+      <div class="top"><b>1일차 · 남해는, 지금</b><span>170,000원</span></div>
+      <div class="who">4인 분담</div>
+      <div class="chip-row" data-chips="4" data-amount="42,500원"></div>
+    </div>
+    <div class="cost-card reveal">
+      <div class="top"><b>2일차 · 파도가 머무는 정원</b><span>300,000원</span></div>
+      <div class="who">3인 분담</div>
+      <div class="chip-row" data-chips="3" data-amount="100,000원"></div>
+    </div>
+  </div>
+</div>
+
+<div class="section-wrap" id="pack">
+  <div class="sec-head reveal">
+    <div><div class="idx">05 / PACKING</div><h2>준비물 체크리스트</h2></div>
+  </div>
+  <div class="pack-wrap reveal">
+    <div class="ring-box">
+      <svg class="ring" viewBox="0 0 150 150">
+        <circle class="bg" cx="75" cy="75" r="60"></circle>
+        <circle class="fg" id="ringFg" cx="75" cy="75" r="60" stroke-dasharray="377" stroke-dashoffset="377"></circle>
+        <text x="75" y="82" text-anchor="middle" class="ring-label" id="ringLabel">0%</text>
+      </svg>
+      <span class="mono" style="font-size:12px; color:var(--sub);">PACKED</span>
+    </div>
+    <div class="pack-list" id="packList">
+      <div class="check-item" data-check><div class="box"></div><span class="txt">2일차 숙소 앞바다에서 수영 가능 — 수영복 &amp; 스노클 챙기기</span></div>
+      <div class="check-item" data-check><div class="box"></div><span class="txt">연휴 기간이라 숙소 예약이 빨리 마감되니 일정 변동 시 미리 공유하기</span></div>
+      <div class="check-item" data-check><div class="box"></div><span class="txt">가방은 최대한 가볍게, 그 대신 체력은 미리 만들어두기 ㅋㅋ</span></div>
+      <div class="check-item" data-check><div class="box"></div><span class="txt">고사리밭길 사전예약 필요 여부 다시 한 번 확인</span></div>
+    </div>
+  </div>
+</div>
+
+<footer>런 대단해가 정리한 남해 바래길 3일 도보여행 계획 🐾</footer>
+
+<script>
+// tabs / scrollspy
+const tabs = Array.from(document.querySelectorAll('#tabs button'));
+const targets = tabs.map(t => document.getElementById(t.dataset.target)).filter(Boolean);
+tabs.forEach(t=> t.addEventListener('click', ()=>{
+  const el = document.getElementById(t.dataset.target);
+  if(el) el.scrollIntoView({behavior:'smooth', block: t.dataset.target==='top' ? 'start':'start'});
+}));
+function spy(){
+  let idx = 0;
+  targets.forEach((el,i)=>{ if(el.getBoundingClientRect().top < 140) idx = i; });
+  tabs.forEach((t,i)=> t.classList.toggle('active', i===idx));
+}
+document.addEventListener('scroll', spy, {passive:true});
+spy();
+
+// reveal
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+}, {threshold:.12});
+document.querySelectorAll('.reveal').forEach(el=> io.observe(el));
+
+// count up stats
+document.querySelectorAll('[data-count]').forEach(el=>{
+  const target = parseFloat(el.dataset.count);
+  const decimal = parseInt(el.dataset.decimal || '0');
+  const obs = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        let start = null; const dur = 1200;
+        function step(ts){
+          if(!start) start = ts;
+          const p = Math.min((ts-start)/dur, 1);
+          const val = target * p;
+          el.textContent = decimal ? val.toFixed(decimal) : Math.round(val);
+          if(p<1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+        obs.unobserve(el);
+      }
+    });
+  }, {threshold:.5});
+  obs.observe(el);
+});
+
+// cost chips
+document.querySelectorAll('[data-chips]').forEach(row=>{
+  const n = parseInt(row.dataset.chips);
+  const amt = row.dataset.amount;
+  for(let i=0;i<n;i++){
+    const c = document.createElement('span');
+    c.className='chip'; c.textContent = '1/'+n+' · '+amt;
+    row.appendChild(c);
+  }
+  const obs = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        Array.from(row.children).forEach((c,i)=> setTimeout(()=> c.classList.add('in'), i*90));
+        obs.unobserve(row);
+      }
+    });
+  }, {threshold:.4});
+  obs.observe(row);
+});
+
+// packing checklist + ring
+const packItems = Array.from(document.querySelectorAll('#packList [data-check]'));
+const ringFg = document.getElementById('ringFg');
+const ringLabel = document.getElementById('ringLabel');
+const CIRC = 377;
+function updateRing(){
+  const done = packItems.filter(i=> i.classList.contains('done')).length;
+  const pct = done / packItems.length;
+  ringFg.style.strokeDashoffset = CIRC - CIRC*pct;
+  ringLabel.textContent = Math.round(pct*100) + '%';
+}
+packItems.forEach(el=> el.addEventListener('click', ()=>{ el.classList.toggle('done'); updateRing(); }));
+updateRing();
+
+// carousel
+(function(){
+  const root = document.getElementById('day3-carousel');
+  const track = root.querySelector('.carousel-track');
+  const slides = Array.from(track.querySelectorAll('.slide'));
+  const prev = root.querySelector('.prev');
+  const next = root.querySelector('.next');
+  const fill = root.querySelector('.carousel-progress-fill');
+  const count = root.querySelector('.carousel-count');
+  let idx = 0;
+  function render(){
+    fill.style.width = ((idx+1)/slides.length*100)+'%';
+    count.textContent = String(idx+1).padStart(2,'0')+' / '+String(slides.length).padStart(2,'0');
+  }
+  function goTo(i){ idx=(i+slides.length)%slides.length; track.scrollTo({left:track.clientWidth*idx, behavior:'smooth'}); render(); }
+  track.addEventListener('scroll', ()=>{
+    clearTimeout(track._t);
+    track._t = setTimeout(()=>{ idx = Math.round(track.scrollLeft/track.clientWidth); render(); }, 80);
+  }, {passive:true});
+  prev.addEventListener('click', ()=> goTo(idx-1));
+  next.addEventListener('click', ()=> goTo(idx+1));
+  render();
+})();
+</script>
+</body>
+</html>

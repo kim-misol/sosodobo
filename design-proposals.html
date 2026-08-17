@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>남해 바래길 리디자인 시안 모음</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&family=Noto+Serif+KR:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#20261f; --sub:#6c7568; --bg:#f6f4ec; --card:#fff; --line:#e4dfcd;
+    --a1:#2f5233; --a2:#1f6e4a; --a3:#caa057;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:"Noto Sans KR",sans-serif; line-height:1.6;}
+  header{max-width:1100px; margin:0 auto; padding:64px 24px 20px; text-align:center;}
+  header .kicker{color:var(--a2); font-weight:700; font-size:12.5px; letter-spacing:.14em; margin-bottom:14px;}
+  header h1{font-family:"Noto Serif KR",serif; font-size:clamp(26px,4vw,38px); margin:0 0 14px;}
+  header p{color:var(--sub); font-size:14.5px; max-width:560px; margin:0 auto;}
+
+  .grid{max-width:1100px; margin:40px auto 80px; padding:0 24px; display:grid; grid-template-columns:1fr; gap:34px;}
+  @media(min-width:840px){ .grid{grid-template-columns:1fr 1fr 1fr;} }
+
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:22px; overflow:hidden;
+    box-shadow:0 10px 30px rgba(30,40,25,.07); display:flex; flex-direction:column;
+    transition:transform .3s ease, box-shadow .3s ease;
+  }
+  .card:hover{transform:translateY(-6px); box-shadow:0 24px 50px rgba(30,40,25,.14);}
+  .preview{
+    position:relative; aspect-ratio:9/12; overflow:hidden; background:#eee; border-bottom:1px solid var(--line);
+  }
+  .preview iframe{
+    position:absolute; top:0; left:0; width:400%; height:400%;
+    transform:scale(.25); transform-origin:top left; border:none; pointer-events:none;
+  }
+  .preview .open{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(180deg, transparent 55%, rgba(0,0,0,.55) 100%); opacity:0; transition:.25s;
+  }
+  .preview:hover .open{opacity:1;}
+  .preview .open span{
+    background:#fff; color:var(--ink); font-weight:700; font-size:13px; padding:11px 22px; border-radius:999px;
+    margin-bottom:18px; box-shadow:0 8px 20px rgba(0,0,0,.25);
+  }
+  .cb{padding:22px 24px 26px; flex:1; display:flex; flex-direction:column;}
+  .swatches{display:flex; gap:6px; margin-bottom:12px;}
+  .swatches i{width:20px; height:20px; border-radius:6px; display:block; border:1px solid rgba(0,0,0,.08);}
+  .cb h2{font-size:18px; margin:0 0 8px;}
+  .cb .mood{font-size:12px; font-weight:700; letter-spacing:.04em; margin-bottom:10px;}
+  .cb p{color:var(--sub); font-size:13.5px; margin:0 0 14px; flex:1;}
+  .cb ul{margin:0 0 18px; padding-left:18px; font-size:12.5px; color:var(--sub);}
+  .cb ul li{margin-bottom:4px;}
+  .cb a.btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px; text-decoration:none;
+    background:var(--ink); color:#fff; padding:12px; border-radius:12px; font-weight:700; font-size:13.5px;
+  }
+
+  .c1 .mood{color:var(--a1);} .c2 .mood{color:var(--a2);} .c3 .mood{color:var(--a3);}
+
+  footer{text-align:center; color:var(--sub); font-size:12.5px; padding:20px 24px 70px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">SOSODOBO · REDESIGN PROPOSALS</div>
+  <h1>남해 바래길 페이지, 세 가지 방향으로 다시 그려봤어요</h1>
+  <p>모바일 · 데스크톱 모두 반응형으로 제작했고, 스크롤에 반응하는 동적인 요소를 각기 다른 방식으로 넣었습니다. 카드를 클릭하면 새 탭에서 실제 페이지를 볼 수 있어요.</p>
+</header>
+
+<div class="grid">
+
+  <div class="card c1">
+    <div class="preview">
+      <iframe src="redesign-1-trail-journal.html" loading="lazy" tabindex="-1"></iframe>
+      <a class="open" href="redesign-1-trail-journal.html" target="_blank"><span>전체 화면으로 보기 ↗</span></a>
+    </div>
+    <div class="cb">
+      <div class="swatches"><i style="background:#2f5233"></i><i style="background:#c8703f"></i><i style="background:#f3ecdc"></i><i style="background:#faf6ec"></i></div>
+      <div class="mood">01 · TRAIL JOURNAL</div>
+      <h2>트레일 저널</h2>
+      <p>손글씨 같은 여정선과 종이 질감의 따뜻한 톤. 여행 일기를 넘기듯 하루하루를 스크롤로 따라가는, 가장 감성적이고 아늑한 방향이에요.</p>
+      <ul>
+        <li>세로로 이어지는 점선 트레일 + Day 배지</li>
+        <li>스크롤 리빌, 이미지 호버 줌</li>
+        <li>데스크톱: 좌측 진행 레일(현재 위치 표시)</li>
+        <li>인터랙티브 준비물 체크리스트</li>
+      </ul>
+      <a class="btn" href="redesign-1-trail-journal.html" target="_blank">시안 1 열어보기 →</a>
+    </div>
+  </div>
+
+  <div class="card c2">
+    <div class="preview">
+      <iframe src="redesign-2-minimal-outdoor.html" loading="lazy" tabindex="-1"></iframe>
+      <a class="open" href="redesign-2-minimal-outdoor.html" target="_blank"><span>전체 화면으로 보기 ↗</span></a>
+    </div>
+    <div class="cb">
+      <div class="swatches"><i style="background:#1f6e4a"></i><i style="background:#e0912e"></i><i style="background:#f7f6f1"></i><i style="background:#12201a"></i></div>
+      <div class="mood">02 · MINIMAL OUTDOOR</div>
+      <h2>미니멀 아웃도어</h2>
+      <p>아웃도어 브랜드처럼 깔끔하고 힘 있는 타이포. 등고선 패턴과 스티키 탭 내비게이션으로, 정보를 빠르게 훑어보기 좋은 실용적인 방향이에요.</p>
+      <ul>
+        <li>상단 고정 탭 내비게이션 (스크롤 스파이)</li>
+        <li>거리·난이도 카운트업 애니메이션</li>
+        <li>정산 금액 칩 애니메이션</li>
+        <li>준비물 진행률 원형 그래프</li>
+      </ul>
+      <a class="btn" href="redesign-2-minimal-outdoor.html" target="_blank">시안 2 열어보기 →</a>
+    </div>
+  </div>
+
+  <div class="card c3">
+    <div class="preview">
+      <iframe src="redesign-3-scrollytelling-map.html" loading="lazy" tabindex="-1"></iframe>
+      <a class="open" href="redesign-3-scrollytelling-map.html" target="_blank"><span>전체 화면으로 보기 ↗</span></a>
+    </div>
+    <div class="cb">
+      <div class="swatches"><i style="background:#0c1b13"></i><i style="background:#caa057"></i><i style="background:#3f8f80"></i><i style="background:#c9d3c6"></i></div>
+      <div class="mood">03 · SCROLLYTELLING MAP</div>
+      <h2>다이나믹 트레일 맵</h2>
+      <p>다크 포레스트 톤 + 골드 포인트. 스크롤하는 만큼 지도 위 여정선이 실제로 그려지는, 가장 몰입감 있고 동적인 방향이에요.</p>
+      <ul>
+        <li>스크롤에 맞춰 그려지는 SVG 여정선</li>
+        <li>애니메이션 파도 배경 (canvas)</li>
+        <li>글래스모피즘 카드 + 우측 진행 도트</li>
+        <li>은은한 글로우 & 호버 인터랙션</li>
+      </ul>
+      <a class="btn" href="redesign-3-scrollytelling-map.html" target="_blank">시안 3 열어보기 →</a>
+    </div>
+  </div>
+
+</div>
+
+<footer>세 시안 모두 동일한 여행 콘텐츠(3일 코스 · 숙소 · 사진 · 정산 · 준비물)를 담고 있고, 모바일/데스크톱 반응형으로 제작되었습니다.</footer>
+
+</body>
+</html>
