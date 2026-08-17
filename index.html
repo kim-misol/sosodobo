@@ -252,6 +252,67 @@
     .lodge-card{flex-direction:column;}
     .lodge-card img{width:100%;height:150px;}
   }
+  .carousel{
+    position:relative;
+    margin-top:2px;
+  }
+  .carousel-track{
+    display:flex;
+    overflow-x:auto;
+    scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;
+    border-radius:14px;
+    scrollbar-width:none;
+  }
+  .carousel-track::-webkit-scrollbar{display:none;}
+  .carousel-track .slide{
+    flex:0 0 100%;
+    scroll-snap-align:center;
+  }
+  .carousel-track img{
+    width:100%;
+    display:block;
+  }
+  .carousel-btn{
+    position:absolute;
+    top:50%;
+    transform:translateY(-50%);
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    border:none;
+    background:rgba(15,74,66,.55);
+    color:#fff;
+    font-size:18px;
+    line-height:1;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .carousel-btn.prev{left:10px;}
+  .carousel-btn.next{right:10px;}
+  .carousel-btn:hover{background:rgba(15,74,66,.8);}
+  .carousel-dots{
+    display:flex;
+    justify-content:center;
+    gap:6px;
+    margin-top:10px;
+  }
+  .carousel-dots .dot{
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    background:#d8d1bd;
+    border:none;
+    padding:0;
+    cursor:pointer;
+  }
+  .carousel-dots .dot.active{
+    background:var(--sea);
+    width:16px;
+    border-radius:4px;
+  }
 </style>
 </head>
 <body>
@@ -367,6 +428,40 @@
     </div>
 
     <div class="block">
+      <h3>📸 동대만길 미리보기</h3>
+      <div class="carousel" id="day3-carousel">
+        <div class="carousel-track">
+          <div class="slide"><img src="assets/day3-carousel/slide-01.jpg" alt="동대만길 소개 - 창선대교 단항검문소부터 창선면행정복지센터까지 구간별 거리 안내" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-02.jpg" alt="03 동대만길 코스 정보 - 총거리 15.0km, 걷는 시간 5시간 30분 내외, 난이도 ★★★" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-03.jpg" alt="인생샷 포인트1 창선대교" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-04.jpg" alt="인생샷 포인트2 대방산" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-05.jpg" alt="인생샷 포인트3 왕후박나무, 수령 500년 이상 천연기념물" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-06.jpg" alt="동대만 해안 마을 풍경" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-07.jpg" alt="동대만길을 따라 걷는 하늘과 숲 풍경" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-08.jpg" alt="동대만길 숲길 구간 전경" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-09.jpg" alt="바다 위 소초도 풍경" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-10.jpg" alt="시작점 창선대교 단항검문소 해안도로" loading="lazy"></div>
+          <div class="slide"><img src="assets/day3-carousel/slide-11.jpg" alt="남해바래길탐방안내센터 인스타그램과 앱 QR코드 안내" loading="lazy"></div>
+        </div>
+        <button type="button" class="carousel-btn prev" aria-label="이전 사진">‹</button>
+        <button type="button" class="carousel-btn next" aria-label="다음 사진">›</button>
+        <div class="carousel-dots">
+          <button type="button" class="dot active" aria-label="1번 사진으로 이동" aria-current="true"></button>
+          <button type="button" class="dot" aria-label="2번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="3번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="4번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="5번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="6번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="7번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="8번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="9번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="10번 사진으로 이동" aria-current="false"></button>
+          <button type="button" class="dot" aria-label="11번 사진으로 이동" aria-current="false"></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
       <h3>🚕 이동</h3>
       <div class="taxi">
         <div class="icon">🚕</div>
@@ -407,6 +502,13 @@
 <footer>
   런 대단해가 정리한 남해 바래길 3일 도보여행 계획 🐾
 </footer>
+
+<script src="assets/carousel.js"></script>
+<script>
+  document.querySelectorAll('.carousel').forEach(function (el) {
+    Carousel.initCarousel(el);
+  });
+</script>
 
 </body>
 </html>

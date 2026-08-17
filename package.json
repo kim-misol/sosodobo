@@ -1,0 +1,8 @@
+{
+  "name": "sosodobo",
+  "private": true,
+  "description": "남해 바래길 3일 도보여행 계획 페이지",
+  "scripts": {
+    "test": "node --test"
+  }
+}
