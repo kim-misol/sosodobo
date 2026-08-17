@@ -59,3 +59,29 @@ test('indexFromScroll clamps to the valid slide range', () => {
 test('indexFromScroll returns 0 when slideWidth is 0 (avoids NaN/divide-by-zero)', () => {
   assert.equal(indexFromScroll(500, 0, 11), 0);
 });
+
+// Day 2 (말발굽길) carousel has 13 slides, a different length than the Day 3
+// (동대만길) carousel's 11. These pin the 13-slide boundaries explicitly so a
+// future change can't silently break the "last slide" / "wrap to first slide"
+// case for this carousel.
+test('nextIndex wraps a 13-slide carousel from the last slide back to the first', () => {
+  assert.equal(nextIndex(11, 13), 12);
+  assert.equal(nextIndex(12, 13), 0);
+});
+
+test('prevIndex wraps a 13-slide carousel from the first slide back to the last', () => {
+  assert.equal(prevIndex(0, 13), 12);
+});
+
+test('indexFromScroll clamps to the last of 13 slides', () => {
+  assert.equal(indexFromScroll(100000, 320, 13), 12);
+});
+
+test('a call with one carousel length does not affect a call with a different length', () => {
+  // Interleave calls for the Day 3 (11-slide) and Day 2 (13-slide) carousels to
+  // confirm the pure functions carry no shared/global state between them.
+  assert.equal(nextIndex(10, 11), 0);
+  assert.equal(nextIndex(12, 13), 0);
+  assert.equal(nextIndex(10, 11), 0);
+  assert.equal(nextIndex(12, 13), 0);
+});
