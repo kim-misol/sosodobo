@@ -219,6 +219,7 @@ test('GET /api/photo-upload reports whether the Blob store is connected', async 
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.ready, false);
     assert.match(res.body.message, /Blob/);
+    assert.ok(Array.isArray(res.body.blobEnvNames));
     process.env.BLOB_READ_WRITE_TOKEN = 'vercel_blob_rw_test';
     res = await call(require(handlerPath), { method: 'GET' });
     assert.deepEqual(res.body, { ready: true });

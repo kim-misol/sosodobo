@@ -10,6 +10,7 @@
 const { del } = require('@vercel/blob');
 const { sql, ensureSchema, sendError } = require('./_db');
 const { parsePhoto, parsePhotoPatch, toInt, mapPhotoRow } = require('./_photo-validate');
+const { findBlobToken } = require('./_blob-token');
 const PhotoCore = require('../assets/photo-core.js');
 
 function readBody(req) {
@@ -123,7 +124,7 @@ module.exports = async function handler(req, res) {
       await sql`DELETE FROM photos WHERE id = ${found.row.id}`;
       // 파일 정리는 실패해도 앨범에서는 이미 사라졌으니 오류로 돌려주지 않습니다.
       try {
-        await del([found.row.url, found.row.thumb_url].filter(Boolean));
+        await del([found.row.url, found.row.thumb_url].filter(Boolean), { token: findBlobToken(process.env) || undefined });
       } catch (err) {
         console.error('Blob 파일 삭제 실패', err);
       }

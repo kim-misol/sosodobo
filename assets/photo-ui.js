@@ -145,6 +145,7 @@
     try {
       var r = await api('/photo-upload');
       state.storageReady = !!(r && r.ready);
+      state.storageMessage = (r && r.message) || null;
     } catch (e) {
       state.storageReady = null; // 확인 실패는 "모름" — 업로드를 막지 않음
     }
@@ -565,7 +566,7 @@
   function render() {
     if (state.loading && !state.photos.length) showStatus('사진을 불러오는 중…', 'loading');
     else if (state.error) showStatus('⚠️ ' + state.error, 'error');
-    else if (state.storageReady === false) showStatus('⚠️ ' + P.STORAGE_MISSING_TEXT, 'error');
+    else if (state.storageReady === false) showStatus('⚠️ ' + (state.storageMessage || P.STORAGE_MISSING_TEXT), 'error');
     else showStatus(null);
     renderMe();
     renderTabs();
