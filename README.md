@@ -9,6 +9,9 @@
 
 정산 기록은 서버(공유 저장소)에 저장돼서 **여러 명이 같은 화면을 봅니다.**
 
+**사진 앨범**도 있어요. 각자 찍은 사진·영상을 올리면 촬영 시간 순으로 모이고, 촬영 정보(위치·시간·ISO·셔터스피드 등)를
+볼 수 있고, 좋아요·댓글을 남기고, 시간 순 **슬라이드 영상**을 만들어 파일로 저장할 수 있어요.
+
 ---
 
 ## 왜 GitHub Pages가 아니라 Vercel인가요?
@@ -46,6 +49,13 @@ DB를 함께 쓸 수 있는 **Vercel + Vercel Postgres(Neon)** 로 올립니다.
 4. 화면 안내에 따라 **Redeploy(재배포)** 하면 끝
    - 표(테이블)는 첫 요청 때 코드가 자동으로 만들어 주니 SQL을 직접 칠 필요 없어요.
 
+### 3-1단계. 사진 저장소(Blob) 연결 — 사진 앨범용
+1. 같은 **Storage** 탭에서 **Create Database** → **Blob** 선택 → 생성
+2. 이 프로젝트에 **Connect** — `BLOB_READ_WRITE_TOKEN` 환경변수가 자동으로 추가됩니다
+3. **Redeploy(재배포)**
+   - 연결 전에는 사진을 올릴 때 "사진 저장소가 아직 연결되지 않았어요" 라고 나와요.
+   - 사진은 브라우저에서 줄여서(긴 변 2048px) 올리고, 영상은 1개 60초·200MB 까지 올릴 수 있어요.
+
 ### 4단계. 주소 공유
 프로젝트의 **Domains** 에 뜨는 주소(예: `https://sosodobo.vercel.app`)를 친구들에게 카톡으로 공유하면 됩니다.
 같은 주소에 들어오면 모두 같은 여행자·지출·정산 화면을 봅니다.
@@ -60,13 +70,29 @@ DB를 함께 쓸 수 있는 **Vercel + Vercel Postgres(Neon)** 로 올립니다.
 > 금액은 원(₩) 단위 정수로 계산하고, 1/N 으로 나눌 때 생기는 1원 단위 나머지는
 > 참여자에게 골고루 배분해 **합계가 항상 원금과 정확히 맞도록** 처리합니다.
 
+### 사진 앨범 쓰는 법
+1. **사진 앨범**에서 "나는 누구?" 에 내 이름을 고르기 (여행자 목록에 있는 이름)
+2. **＋ 올리기** 로 사진·영상 여러 개 선택 → 일차·캡션 확인 → 올리기
+3. 사진을 누르면 크게 보기: ♥ 좋아요, ⓘ 촬영 정보(내 사진이면 시간·위치 수정), 댓글
+4. **▶ 슬라이드 영상** 에서 범위·길이·화면 비율을 고르고 재생하거나 **영상 파일로 저장**
+
+> `assets/places.js` 에 여행 첫날 날짜(`TRIP_START_DATE`)를 넣으면 일차가 자동으로 추천되고,
+> 장소 좌표를 채우면 사진 위치에 가까운 장소 이름이 자동으로 붙어요.
+
 ---
 
 ## 개발자 메모
 - 정산 계산 로직은 `assets/settle-core.js` 에 순수 함수로 분리돼 있고 `tests/settlement.test.js` 로 검증합니다.
-- 서버리스 API: `api/state.js`(전체 조회), `api/travelers.js`, `api/expenses.js`. 공용 DB 헬퍼는 `api/_db.js`.
+- 서버리스 API: `api/state.js`(전체 조회), `api/travelers.js`, `api/expenses.js`, `api/notes.js`. 공용 DB 헬퍼는 `api/_db.js`.
+- 사진 앨범
+  - API: `api/photos.js`(목록·등록·수정·삭제), `api/photo-upload.js`(Blob 업로드 토큰), `api/photo-likes.js`, `api/photo-comments.js`,
+    입력 검증 `api/_photo-validate.js`
+  - 순수 로직: `assets/photo-core.js`(앨범), `assets/reel-core.js`(슬라이드 영상) — 브라우저·서버·테스트가 같이 씀
+  - 화면: `assets/photo-ui.js`, `assets/reel-ui.js`, 여행 정보 `assets/places.js`
+  - 빌드 도구 없이 쓰는 외부 코드는 `assets/vendor/` (출처·라이선스는 그 폴더의 README)
+  - 설계·진행 기록: `plan_photo-album.md`
 - 테스트 실행:
   ```bash
-  npm test        # node --test (carousel + settlement 단위 테스트)
+  npm test        # node --test (캐러셀·정산·사진 앨범·슬라이드 영상 단위/API 테스트)
   ```
 - 로컬에서 API까지 돌려보려면 [Vercel CLI](https://vercel.com/docs/cli) 로 `vercel dev` 를 쓰면 됩니다.

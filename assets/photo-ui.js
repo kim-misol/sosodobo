@@ -1,0 +1,1203 @@
+/**
+ * 사진·영상 앨범 화면.
+ *
+ * 계산·검증은 테스트된 photo-core.js(window.PhotoCore)에 두고, 이 파일은
+ * DOM 렌더링·이벤트·네트워크만 다룹니다. (settle-ui.js 와 같은 구조)
+ *
+ * 필요 전역: PhotoCore, TripPlaces, exifr(assets/vendor), VercelBlobClient(assets/vendor), Carousel
+ */
+(function () {
+  'use strict';
+
+  var P = window.PhotoCore;
+  var API = 'api';
+  var ME_KEY = 'sosodobo.photos.me';
+  var POLL_MS = 30000;
+
+  var $ = function (sel, root) { return (root || document).querySelector(sel); };
+
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 상태
+  // ---------------------------------------------------------------------------
+  var state = {
+    me: null,            // 내 traveler id
+    travelers: [],
+    photos: [],
+    filter: 'all',       // 'all' | 1 | 2 | 3 | 'etc'
+    loading: true,
+    error: null,
+    pending: [],         // 업로드 대기 항목
+    uploading: false,
+    lightboxId: null,    // 라이트박스에 열린 사진 id
+    infoOpen: false,     // 라이트박스 ⓘ 촬영 정보 패널
+    editingMeta: false,  // 시간·위치 수정 폼 열림
+    saving: false,
+  };
+
+  var els = {};
+
+  // ---------------------------------------------------------------------------
+  // 공통
+  // ---------------------------------------------------------------------------
+  async function api(path, options) {
+    var res = await fetch(API + path, options);
+    var data = null;
+    try { data = await res.json(); } catch (e) { /* 본문 없음 */ }
+    if (!res.ok) throw new Error((data && data.error) || ('요청 실패 (' + res.status + ')'));
+    return data;
+  }
+
+  function jsonOpts(method, payload) {
+    return { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) };
+  }
+
+  function readMe() {
+    try {
+      var v = parseInt(window.localStorage.getItem(ME_KEY), 10);
+      return Number.isInteger(v) ? v : null;
+    } catch (e) { return null; }
+  }
+
+  function saveMe(id) {
+    state.me = id;
+    try {
+      if (id === null) window.localStorage.removeItem(ME_KEY);
+      else window.localStorage.setItem(ME_KEY, String(id));
+    } catch (e) { /* 저장 불가(사생활 보호 모드 등) → 이번 방문 동안만 기억 */ }
+  }
+
+  function nameOf(id) {
+    var t = state.travelers.find(function (x) { return x.id === id; });
+    return t ? t.name : '알 수 없음';
+  }
+
+  function randId() {
+    return Math.random().toString(36).slice(2, 10);
+  }
+
+  function formatWhen(iso) {
+    return P.formatShortDateTimeKo(iso);
+  }
+
+  function tripPlaces() {
+    return (window.TripPlaces && window.TripPlaces.PLACES) || [];
+  }
+
+  function visiblePhotos() {
+    return P.filterByDay(P.sortByTakenAt(state.photos), state.filter);
+  }
+
+  function photoById(id) {
+    return state.photos.find(function (p) { return p.id === id; }) || null;
+  }
+
+  function showStatus(msg, kind) {
+    if (!msg) { els.status.style.display = 'none'; return; }
+    els.status.textContent = msg;
+    els.status.className = 'st-status ' + (kind || 'loading');
+    els.status.style.display = 'block';
+  }
+
+  // ---------------------------------------------------------------------------
+  // 불러오기 (+ 화면이 보일 때만 주기적으로 새로고침)
+  // ---------------------------------------------------------------------------
+  async function load(opts) {
+    var quiet = opts && opts.quiet;
+    if (!quiet) { state.loading = true; render(); }
+    try {
+      var data = await api('/photos');
+      state.photos = data.photos || [];
+      state.travelers = data.travelers || [];
+      if (state.me !== null && !state.travelers.some(function (t) { return t.id === state.me; })) {
+        saveMe(null); // 삭제된 여행자면 다시 고르게
+      }
+      state.error = null;
+    } catch (err) {
+      if (!quiet) state.error = err.message;
+    } finally {
+      state.loading = false;
+      render();
+      if (state.lightboxId !== null && !lightboxBusy()) renderLightbox();
+      if (quiet && state.lightboxId !== null && comments[state.lightboxId]) loadComments(state.lightboxId);
+    }
+  }
+
+  /** 라이트박스에서 무언가 입력 중이면 새로고침으로 다시 그리지 않습니다. */
+  function lightboxBusy() {
+    if (state.editingMeta || state.saving || editingCommentId !== null) return true;
+    var active = document.activeElement;
+    if (active && els.lightbox.contains(active) && active.matches('input, textarea, select')) return true;
+    var typed = Array.prototype.some.call(els.lightbox.querySelectorAll('input[type="text"], textarea'), function (el) {
+      return el.value.trim() !== '';
+    });
+    return typed;
+  }
+
+  var sectionVisible = false;
+  function startPolling() {
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) {
+        sectionVisible = entries.some(function (e) { return e.isIntersecting; });
+      }).observe(els.root);
+    } else {
+      sectionVisible = true;
+    }
+    setInterval(function () {
+      var lightboxOpen = state.lightboxId !== null;
+      if (document.hidden || state.uploading || (!sectionVisible && !lightboxOpen)) return;
+      load({ quiet: true });
+    }, POLL_MS);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && sectionVisible) load({ quiet: true });
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 업로드 준비: EXIF 읽기 → 리사이즈 → 미리보기
+  // ---------------------------------------------------------------------------
+  async function readExif(file) {
+    if (!window.exifr) return null;
+    try {
+      return await window.exifr.parse(file, {
+        tiff: true, exif: true, gps: true,
+        xmp: false, icc: false, iptc: false, jfif: false, ihdr: false,
+      });
+    } catch (e) {
+      return null; // EXIF 가 없거나 읽을 수 없는 파일
+    }
+  }
+
+  function loadImage(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () { resolve({ img: img, url: url }); };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error('이 브라우저에서 열 수 없는 사진 형식이에요. (HEIC 라면 iPhone 설정 → 카메라 → 포맷 → "높은 호환성"으로 찍거나, Safari 에서 올려 주세요.)'));
+      };
+      img.src = url;
+    });
+  }
+
+  function canvasToJpeg(source, srcW, srcH, maxEdge, quality) {
+    var size = P.fitWithin(srcW, srcH, maxEdge);
+    var canvas = document.createElement('canvas');
+    canvas.width = size.width;
+    canvas.height = size.height;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(source, 0, 0, size.width, size.height);
+    return new Promise(function (resolve, reject) {
+      canvas.toBlob(function (blob) {
+        if (blob) resolve({ blob: blob, width: size.width, height: size.height });
+        else reject(new Error('사진을 변환하지 못했어요.'));
+      }, 'image/jpeg', quality);
+    });
+  }
+
+  async function prepareImage(item) {
+    var raw = await readExif(item.file);
+    var exif = P.extractExif(raw);
+    var loaded = await loadImage(item.file);
+    try {
+      var w = loaded.img.naturalWidth;
+      var h = loaded.img.naturalHeight;
+      var full = await canvasToJpeg(loaded.img, w, h, P.LIMITS.photoMaxEdge, P.LIMITS.photoQuality);
+      var thumb = await canvasToJpeg(loaded.img, w, h, P.LIMITS.thumbMaxEdge, P.LIMITS.thumbQuality);
+      item.full = full.blob;
+      item.thumb = thumb.blob;
+      item.width = full.width;
+      item.height = full.height;
+    } finally {
+      URL.revokeObjectURL(loaded.url);
+    }
+    item.previewUrl = URL.createObjectURL(item.thumb);
+    applyTimeAndPlace(item, exif.exifTime, exif.lat, exif.lng);
+    item.camera = exif.camera;
+  }
+
+  /** 촬영 시각·위치 기본값 채우기 (EXIF → 파일 시각 → 지금). */
+  function applyTimeAndPlace(item, exifTime, lat, lng) {
+    var picked = P.pickTakenAt({ exifTime: exifTime, fileModified: item.file.lastModified, uploadedAt: new Date() });
+    item.takenAt = picked.takenAt;
+    item.takenAtSource = picked.source;
+    item.lat = lat;
+    item.lng = lng;
+    var near = P.nearestPlace(lat, lng, tripPlaces());
+    item.placeName = near ? near.name : null;
+    item.locationSource = lat !== null ? 'exif' : null;
+    item.day = P.suggestDay(item.takenAt, window.TripPlaces && window.TripPlaces.TRIP_START_DATE);
+  }
+
+  var preparers = { image: prepareImage, video: function (item) { return prepareVideo(item); } };
+
+  async function addFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || []);
+    if (!files.length) return;
+    var items = files.map(function (file) {
+      return { key: randId(), file: file, kind: P.classifyFile(file), status: 'preparing', caption: '', error: null, progress: 0 };
+    });
+    state.pending = state.pending.concat(items);
+    renderPending();
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      try {
+        var prep = preparers[item.kind];
+        if (!prep) throw new Error('사진이나 영상만 올릴 수 있어요.');
+        await prep(item);
+        item.status = 'ready';
+      } catch (err) {
+        item.status = 'error';
+        item.error = err.message;
+      }
+      renderPending();
+    }
+  }
+
+  function removePending(key) {
+    state.pending = state.pending.filter(function (it) {
+      if (it.key === key && it.previewUrl) URL.revokeObjectURL(it.previewUrl);
+      return it.key !== key;
+    });
+    renderPending();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 업로드: Blob 직접 업로드 → /api/photos 등록
+  // ---------------------------------------------------------------------------
+  function uploadBlob(path, blob, contentType, onProgress) {
+    return window.VercelBlobClient.upload(path, blob, {
+      access: 'public',
+      handleUploadUrl: API + '/photo-upload',
+      contentType: contentType,
+      multipart: blob.size > 8 * 1024 * 1024,
+      onUploadProgress: onProgress,
+    });
+  }
+
+  async function uploadImage(item) {
+    var now = Date.now();
+    var rand = randId();
+    var full = await uploadBlob(P.blobPath('photo', 'jpg', now, rand), item.full, 'image/jpeg', function (e) {
+      item.progress = Math.round(e.percentage * 0.9);
+      renderPendingProgress(item);
+    });
+    var thumb = await uploadBlob(P.blobPath('thumb', 'jpg', now, rand), item.thumb, 'image/jpeg');
+    return { url: full.url, thumbUrl: thumb.url };
+  }
+
+  var uploaders = { image: uploadImage, video: function (item) { return uploadVideo(item); } };
+
+  async function uploadAll() {
+    if (state.uploading) return;
+    if (!Number.isInteger(state.me)) {
+      alert('먼저 "나는 누구?"에서 내 이름을 골라 주세요.');
+      return;
+    }
+    if (!window.VercelBlobClient) {
+      alert('업로드 도구를 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.');
+      return;
+    }
+    var ready = state.pending.filter(function (it) { return it.status === 'ready'; });
+    if (!ready.length) return;
+    state.uploading = true;
+    renderPending();
+    for (var i = 0; i < ready.length; i++) {
+      var item = ready[i];
+      item.status = 'uploading';
+      renderPending();
+      try {
+        var caption = P.validateCaption(item.caption);
+        if (caption.error) throw new Error(caption.error);
+        var files = await uploaders[item.kind](item);
+        var saved = await api('/photos', jsonOpts('POST', {
+          uploaderId: state.me,
+          mediaType: item.kind,
+          url: files.url,
+          thumbUrl: files.thumbUrl,
+          width: item.width,
+          height: item.height,
+          durationSec: item.durationSec || null,
+          caption: caption.value,
+          day: item.day,
+          takenAt: item.takenAt,
+          takenAtSource: item.takenAtSource,
+          lat: item.lat,
+          lng: item.lng,
+          placeName: item.placeName,
+          locationSource: item.locationSource,
+          camera: item.camera,
+        }));
+        state.photos.push(saved);
+        removePending(item.key);
+      } catch (err) {
+        item.status = 'error';
+        item.error = err.message;
+      }
+      renderPending();
+      render();
+    }
+    state.uploading = false;
+    renderPending();
+    load({ quiet: true });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 영상: 길이 확인 → 첫 부분 프레임으로 썸네일 → 원본 그대로 업로드
+  // ---------------------------------------------------------------------------
+  function waitFor(target, eventName, ms) {
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () { cleanup(); reject(new Error('timeout')); }, ms);
+      function ok() { cleanup(); resolve(); }
+      function fail() { cleanup(); reject(new Error('error')); }
+      function cleanup() {
+        clearTimeout(timer);
+        target.removeEventListener(eventName, ok);
+        target.removeEventListener('error', fail);
+      }
+      target.addEventListener(eventName, ok);
+      target.addEventListener('error', fail);
+    });
+  }
+
+  /** 썸네일을 못 뽑는 브라우저(일부 iOS)용 대체 이미지. */
+  function placeholderThumb() {
+    var canvas = document.createElement('canvas');
+    canvas.width = 480;
+    canvas.height = 360;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#2f5233';
+    ctx.fillRect(0, 0, 480, 360);
+    ctx.fillStyle = '#f5efdb';
+    ctx.beginPath();
+    ctx.moveTo(205, 140); ctx.lineTo(205, 220); ctx.lineTo(275, 180); ctx.closePath();
+    ctx.fill();
+    return new Promise(function (resolve) {
+      canvas.toBlob(function (b) { resolve({ blob: b, width: 480, height: 360 }); }, 'image/jpeg', 0.8);
+    });
+  }
+
+  async function prepareVideo(item) {
+    var url = URL.createObjectURL(item.file);
+    var video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    video.src = url;
+    try {
+      try {
+        await waitFor(video, 'loadedmetadata', 15000);
+      } catch (e) {
+        throw new Error('이 브라우저에서 열 수 없는 영상 형식이에요.');
+      }
+      item.durationSec = video.duration;
+      var check = P.validateVideo({ durationSec: video.duration, size: item.file.size });
+      if (check.error) throw new Error(check.error);
+      item.width = video.videoWidth || null;
+      item.height = video.videoHeight || null;
+
+      var thumb;
+      try {
+        video.currentTime = P.videoThumbTime(video.duration);
+        await waitFor(video, 'seeked', 8000);
+        thumb = await canvasToJpeg(video, video.videoWidth, video.videoHeight, P.LIMITS.thumbMaxEdge, P.LIMITS.thumbQuality);
+      } catch (e) {
+        thumb = await placeholderThumb();
+      }
+      item.thumb = thumb.blob;
+      item.previewUrl = URL.createObjectURL(item.thumb);
+    } finally {
+      video.removeAttribute('src');
+      video.load();
+      URL.revokeObjectURL(url);
+    }
+    // 영상 파일의 촬영 시각·위치는 브라우저에서 믿을 만하게 읽기 어려워 파일 시각으로 추정합니다.
+    applyTimeAndPlace(item, null, null, null);
+    item.camera = null;
+  }
+
+  async function uploadVideo(item) {
+    var now = Date.now();
+    var rand = randId();
+    var info = P.videoFileInfo(item.file);
+    var main = await uploadBlob(P.blobPath('video', info.ext, now, rand), item.file, info.contentType, function (e) {
+      item.progress = Math.round(e.percentage * 0.95);
+      renderPendingProgress(item);
+    });
+    var thumb = await uploadBlob(P.blobPath('thumb', 'jpg', now, rand), item.thumb, 'image/jpeg');
+    return { url: main.url, thumbUrl: thumb.url };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 삭제
+  // ---------------------------------------------------------------------------
+  async function deletePhoto(id) {
+    if (!confirm('앨범에서 삭제할까요? 되돌릴 수 없어요.')) return;
+    try {
+      await api('/photos?id=' + id + '&travelerId=' + state.me, { method: 'DELETE' });
+      state.photos = state.photos.filter(function (p) { return p.id !== id; });
+      closeLightbox();
+      render();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 렌더링: 나는 누구 / 필터 / 격자
+  // ---------------------------------------------------------------------------
+  function renderMe() {
+    if (!state.travelers.length) {
+      els.me.innerHTML = '<span class="ph-hint">먼저 아래 <a href="#settle">지출·정산</a>의 여행자에 이름을 등록해 주세요.</span>';
+      return;
+    }
+    var opts = ['<option value="">나는 누구?</option>'].concat(state.travelers.map(function (t) {
+      return '<option value="' + t.id + '"' + (t.id === state.me ? ' selected' : '') + '>나는 ' + esc(t.name) + '</option>';
+    }));
+    els.me.innerHTML = '<select id="ph-me-select" class="ph-me-select" aria-label="나는 누구?">' + opts.join('') + '</select>';
+  }
+
+  var FILTERS = [
+    { key: 'all', label: '전체' },
+    { key: 1, label: '1일차' },
+    { key: 2, label: '2일차' },
+    { key: 3, label: '3일차' },
+    { key: 'etc', label: '기타' },
+  ];
+
+  function renderTabs() {
+    els.tabs.innerHTML = FILTERS.map(function (f) {
+      var count = P.filterByDay(state.photos, f.key).length;
+      if (f.key === 'etc' && count === 0) return '';
+      var active = String(state.filter) === String(f.key);
+      return '<button type="button" class="ph-tab' + (active ? ' active' : '') + '" data-filter="' + f.key + '" aria-pressed="' + active + '">' +
+        f.label + ' <span class="n">' + count + '</span></button>';
+    }).join('');
+  }
+
+  function cellBadges(p) {
+    var out = [];
+    if (p.mediaType === 'video') out.push('<span class="ph-badge play">▶ ' + P.formatDuration(p.durationSec || 0) + '</span>');
+    if (p.likeCount) out.push('<span class="ph-badge">♥ ' + p.likeCount + '</span>');
+    if (p.commentCount) out.push('<span class="ph-badge">💬 ' + p.commentCount + '</span>');
+    return out.length ? '<span class="ph-badges">' + out.join('') + '</span>' : '';
+  }
+
+  function renderGrid() {
+    var list = visiblePhotos();
+    if (state.loading && !state.photos.length) {
+      els.grid.innerHTML = '';
+      return;
+    }
+    if (!list.length) {
+      els.grid.innerHTML = '<p class="ph-empty">' + (state.photos.length
+        ? '이 일차에 올라온 사진이 아직 없어요.'
+        : '아직 올라온 사진이 없어요. 첫 사진을 올려 주세요! 📷') + '</p>';
+      return;
+    }
+    els.grid.innerHTML = list.map(function (p) {
+      var alt = (p.caption || '여행 사진') + ' — ' + nameOf(p.uploaderId);
+      return '<button type="button" class="ph-cell" data-id="' + p.id + '">' +
+        '<img src="' + esc(p.thumbUrl) + '" alt="' + esc(alt) + '" loading="lazy">' +
+        cellBadges(p) + '</button>';
+    }).join('');
+  }
+
+  function render() {
+    if (state.loading && !state.photos.length) showStatus('사진을 불러오는 중…', 'loading');
+    else if (state.error) showStatus('⚠️ ' + state.error, 'error');
+    else showStatus(null);
+    renderMe();
+    renderTabs();
+    renderGrid();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 렌더링: 업로드 대기 목록
+  // ---------------------------------------------------------------------------
+  function dayOptions(selected) {
+    var opts = [{ v: '', label: '일차 없음' }, { v: 1, label: '1일차' }, { v: 2, label: '2일차' }, { v: 3, label: '3일차' }];
+    return opts.map(function (o) {
+      var sel = String(o.v) === String(selected === null || selected === undefined ? '' : selected) ? ' selected' : '';
+      return '<option value="' + o.v + '"' + sel + '>' + o.label + '</option>';
+    }).join('');
+  }
+
+  function pendingMeta(it) {
+    var bits = [];
+    if (it.kind === 'video' && it.durationSec) bits.push('🎞 ' + P.formatDuration(it.durationSec));
+    if (it.takenAt) {
+      bits.push('📅 ' + esc(formatWhen(it.takenAt)) + (it.takenAtSource === 'exif' ? '' : ' <span class="ph-muted">(추정)</span>'));
+    }
+    if (it.lat !== null && it.lat !== undefined) bits.push('📍 ' + (it.placeName ? esc(it.placeName) : '위치 정보 있음'));
+    else bits.push('<span class="ph-muted">📍 위치 정보 없음</span>');
+    return bits.join(' · ');
+  }
+
+  function renderPending() {
+    if (!state.pending.length) {
+      els.pending.innerHTML = '';
+      els.pending.hidden = true;
+      return;
+    }
+    els.pending.hidden = false;
+    var readyCount = state.pending.filter(function (it) { return it.status === 'ready'; }).length;
+    var rows = state.pending.map(function (it) {
+      var thumb = it.previewUrl
+        ? '<img src="' + esc(it.previewUrl) + '" alt="">'
+        : '<span class="ph-pend-ph">' + (it.status === 'error' ? '⚠️' : '⏳') + '</span>';
+      var body;
+      if (it.status === 'preparing') {
+        body = '<div class="ph-pend-name">' + esc(it.file.name) + '</div><div class="ph-muted">준비 중…</div>';
+      } else if (it.status === 'error') {
+        body = '<div class="ph-pend-name">' + esc(it.file.name) + '</div><div class="ph-err">' + esc(it.error) + '</div>';
+      } else {
+        var disabled = it.status === 'uploading' ? ' disabled' : '';
+        body = '<div class="ph-pend-meta">' + pendingMeta(it) + '</div>' +
+          '<div class="ph-pend-fields">' +
+          '<select data-field="day" data-key="' + it.key + '" aria-label="일차"' + disabled + '>' + dayOptions(it.day) + '</select>' +
+          '<input type="text" data-field="caption" data-key="' + it.key + '" maxlength="' + P.LIMITS.captionMax +
+          '" placeholder="한 줄 캡션 (선택)" value="' + esc(it.caption) + '"' + disabled + '>' +
+          '</div>' +
+          (it.status === 'uploading'
+            ? '<div class="ph-progress"><span data-progress="' + it.key + '" style="width:' + it.progress + '%"></span></div>'
+            : '');
+      }
+      var remove = it.status === 'uploading' ? '' :
+        '<button type="button" class="ph-x" data-remove="' + it.key + '" aria-label="목록에서 빼기">×</button>';
+      return '<div class="ph-pend-row">' + '<div class="ph-pend-thumb">' + thumb + '</div>' +
+        '<div class="ph-pend-body">' + body + '</div>' + remove + '</div>';
+    }).join('');
+    els.pending.innerHTML =
+      '<div class="ph-pend-head"><b>올릴 사진·영상 ' + state.pending.length + '개</b>' +
+      (state.me === null ? ' <span class="ph-err">— 위에서 "나는 누구?"를 먼저 골라 주세요</span>' : '') + '</div>' +
+      rows +
+      '<div class="ph-pend-actions">' +
+      '<button type="button" class="st-btn" data-action="upload"' + (state.uploading || !readyCount ? ' disabled' : '') + '>' +
+      (state.uploading ? '올리는 중…' : readyCount + '개 올리기') + '</button>' +
+      '<button type="button" class="st-linkbtn" data-action="clear"' + (state.uploading ? ' disabled' : '') + '>모두 취소</button>' +
+      '</div>';
+  }
+
+  function renderPendingProgress(item) {
+    var bar = els.pending.querySelector('[data-progress="' + item.key + '"]');
+    if (bar) bar.style.width = item.progress + '%';
+  }
+
+  // ---------------------------------------------------------------------------
+  // 라이트박스
+  // ---------------------------------------------------------------------------
+  function openLightbox(id) {
+    state.lightboxId = id;
+    els.lightbox.hidden = false;
+    document.body.classList.add('ph-noscroll');
+    renderLightbox();
+    els.lightbox.focus();
+  }
+
+  function closeLightbox() {
+    if (state.lightboxId === null) return;
+    state.lightboxId = null;
+    state.editingMeta = false;
+    editingCommentId = null;
+    var v = els.lightbox.querySelector('video');
+    if (v) v.pause();
+    els.lightbox.hidden = true;
+    els.lightbox.innerHTML = '';
+    document.body.classList.remove('ph-noscroll');
+  }
+
+  function step(delta) {
+    var list = visiblePhotos();
+    var idx = list.findIndex(function (p) { return p.id === state.lightboxId; });
+    if (idx < 0 || list.length < 2) return;
+    var next = delta > 0 ? window.Carousel.nextIndex(idx, list.length) : window.Carousel.prevIndex(idx, list.length);
+    state.lightboxId = list[next].id;
+    state.editingMeta = false;
+    editingCommentId = null;
+    renderLightbox();
+  }
+
+  function mediaHtml(p) {
+    if (p.mediaType === 'video') {
+      return '<video src="' + esc(p.url) + '" poster="' + esc(p.thumbUrl) + '" controls playsinline preload="metadata"></video>';
+    }
+    return '<img src="' + esc(p.url) + '" alt="' + esc(p.caption || '여행 사진') + '">';
+  }
+
+  /** 라이트박스 하단 정보 영역. 2단계 이후 기능이 여기에 확장됩니다. */
+  var lightboxExtras = [];
+
+  function renderLightbox() {
+    var p = photoById(state.lightboxId);
+    if (!p) { closeLightbox(); return; }
+    var list = visiblePhotos();
+    var idx = list.findIndex(function (x) { return x.id === p.id; });
+    var mine = P.canModify(p, state.me);
+    var where = p.placeName ? ' · 📍 ' + esc(p.placeName) : '';
+    var dayLabel = p.day ? ' · ' + p.day + '일차' : '';
+
+    var extras = lightboxExtras.map(function (fn) { return fn(p, mine); }).join('');
+
+    els.lightbox.innerHTML =
+      '<div class="ph-lb-top">' +
+      '<span class="ph-lb-count">' + (idx + 1) + ' / ' + list.length + '</span>' +
+      '<button type="button" class="ph-lb-close" data-action="close" aria-label="닫기">×</button>' +
+      '</div>' +
+      '<div class="ph-lb-stage">' +
+      (list.length > 1 ? '<button type="button" class="ph-lb-nav prev" data-action="prev" aria-label="이전">‹</button>' : '') +
+      '<div class="ph-lb-media">' + mediaHtml(p) + '</div>' +
+      (list.length > 1 ? '<button type="button" class="ph-lb-nav next" data-action="next" aria-label="다음">›</button>' : '') +
+      '</div>' +
+      '<div class="ph-lb-panel">' +
+      '<div class="ph-lb-who"><b>' + esc(nameOf(p.uploaderId)) + '</b>' +
+      '<span class="ph-muted"> · ' + esc(formatWhen(p.takenAt)) + dayLabel + where + '</span></div>' +
+      (p.caption ? '<p class="ph-lb-caption">' + esc(p.caption) + '</p>' : '') +
+      '<div class="ph-lb-actions" data-slot="actions">' +
+      likeButtonHtml(p) +
+      '<button type="button" class="ph-act' + (state.infoOpen ? ' on' : '') + '" data-action="info" aria-expanded="' + state.infoOpen + '">ⓘ 정보</button>' +
+      '<a class="ph-act" href="' + esc(p.url) + '?download=1" download>⬇ 다운로드</a>' +
+      (mine ? '<button type="button" class="ph-act danger" data-action="delete">🗑 삭제</button>' : '') +
+      '</div>' +
+      (p.likeCount ? '<div class="ph-likers">' + esc(P.likeSummary(p.likedBy, nameOf)) + '</div>' : '') +
+      (state.infoOpen ? infoPanelHtml(p, mine) : '') +
+      commentsSectionHtml(p) +
+      extras +
+      '</div>';
+    ensureComments(p.id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 좋아요 (누르는 즉시 화면에 반영 → 서버 응답으로 맞추고, 실패하면 되돌림)
+  // ---------------------------------------------------------------------------
+  function likeButtonHtml(p) {
+    var on = P.hasLiked(p, state.me);
+    return '<button type="button" class="ph-act like' + (on ? ' on' : '') + '" data-action="like" aria-pressed="' + on + '">' +
+      (on ? '♥' : '♡') + ' 좋아요' + (p.likeCount ? ' ' + p.likeCount : '') + '</button>';
+  }
+
+  var likeInFlight = {};
+
+  function replacePhoto(updated) {
+    state.photos = state.photos.map(function (x) { return x.id === updated.id ? updated : x; });
+  }
+
+  async function toggleLike(id) {
+    if (!Number.isInteger(state.me)) { alert('먼저 "나는 누구?"에서 내 이름을 골라 주세요.'); return; }
+    if (likeInFlight[id]) return;
+    var before = photoById(id);
+    if (!before) return;
+    var wasLiked = P.hasLiked(before, state.me);
+    replacePhoto(P.toggleLike(before, state.me));
+    renderLightbox();
+    renderGrid();
+    likeInFlight[id] = true;
+    try {
+      var result = wasLiked
+        ? await api('/photo-likes?photoId=' + id + '&travelerId=' + state.me, { method: 'DELETE' })
+        : await api('/photo-likes', jsonOpts('POST', { photoId: id, travelerId: state.me }));
+      var cur = photoById(id);
+      if (cur) replacePhoto(Object.assign({}, cur, { likeCount: result.likeCount, likedBy: result.likedBy }));
+    } catch (err) {
+      var cur2 = photoById(id);
+      if (cur2) replacePhoto(Object.assign({}, cur2, { likeCount: before.likeCount, likedBy: before.likedBy }));
+      alert('좋아요를 저장하지 못했어요: ' + err.message);
+    } finally {
+      likeInFlight[id] = false;
+      if (state.lightboxId === id && !lightboxBusy()) renderLightbox();
+      renderGrid();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 댓글 (라이트박스를 열 때 불러오고, 목록 부분만 따로 다시 그려 입력 중인 글을 지키기)
+  // ---------------------------------------------------------------------------
+  var comments = {};          // photoId → { list: [], loaded: bool, error: string|null }
+  var editingCommentId = null;
+  var commentBusy = false;
+
+  function commentItemHtml(c) {
+    var mine = Number.isInteger(state.me) && P.canModify(c, state.me, 'authorId');
+    if (editingCommentId === c.id) {
+      return '<li class="ph-cmt editing" data-comment="' + c.id + '">' +
+        '<form class="ph-cmt-edit-form" data-id="' + c.id + '" autocomplete="off">' +
+        '<textarea name="content" rows="2" maxlength="' + P.LIMITS.commentMax + '">' + esc(c.content) + '</textarea>' +
+        '<div class="ph-lb-actions"><button type="submit" class="ph-act on"' + (commentBusy ? ' disabled' : '') + '>저장</button>' +
+        '<button type="button" class="ph-act" data-action="comment-edit-cancel">취소</button></div>' +
+        '</form></li>';
+    }
+    return '<li class="ph-cmt" data-comment="' + c.id + '">' +
+      '<div class="ph-cmt-head"><b>' + esc(nameOf(c.authorId)) + '</b>' +
+      '<span class="ph-muted"> · ' + esc(P.formatRelativeTime(c.createdAt)) +
+      (P.isCommentEdited(c) ? ' · 수정됨' : '') + '</span>' +
+      (mine ? '<span class="ph-cmt-tools">' +
+        '<button type="button" class="ph-linkbtn" data-action="comment-edit" data-id="' + c.id + '">수정</button>' +
+        '<button type="button" class="ph-linkbtn" data-action="comment-delete" data-id="' + c.id + '">삭제</button>' +
+        '</span>' : '') +
+      '</div><div class="ph-cmt-body">' + esc(c.content) + '</div></li>';
+  }
+
+  function commentListHtml(photoId) {
+    var c = comments[photoId];
+    if (!c || !c.loaded) return '<li class="ph-muted ph-cmt-empty">' + (c && c.error ? '⚠️ ' + esc(c.error) : '댓글 불러오는 중…') + '</li>';
+    if (!c.list.length) return '<li class="ph-muted ph-cmt-empty">첫 댓글을 남겨 보세요.</li>';
+    return c.list.map(commentItemHtml).join('');
+  }
+
+  function commentsSectionHtml(p) {
+    var count = comments[p.id] && comments[p.id].loaded ? comments[p.id].list.length : p.commentCount;
+    return '<div class="ph-comments" data-slot="comments">' +
+      '<div class="ph-cmt-title">💬 댓글 <span data-slot="comment-count">' + (count || 0) + '</span></div>' +
+      '<ul class="ph-cmt-list" data-slot="comment-list">' + commentListHtml(p.id) + '</ul>' +
+      '<form class="ph-cmt-form" autocomplete="off">' +
+      '<input type="text" name="content" maxlength="' + P.LIMITS.commentMax + '" placeholder="' +
+      (Number.isInteger(state.me) ? nameOf(state.me) + '(으)로 댓글 달기' : '"나는 누구?"를 먼저 골라 주세요') + '"' +
+      (Number.isInteger(state.me) ? '' : ' disabled') + '>' +
+      '<button type="submit" class="ph-act on"' + (Number.isInteger(state.me) ? '' : ' disabled') + '>등록</button>' +
+      '</form></div>';
+  }
+
+  /** 목록·개수만 다시 그림 (입력창은 그대로). */
+  function refreshCommentList(photoId) {
+    if (state.lightboxId !== photoId || editingCommentId !== null) return;
+    var list = els.lightbox.querySelector('[data-slot="comment-list"]');
+    var count = els.lightbox.querySelector('[data-slot="comment-count"]');
+    if (list) list.innerHTML = commentListHtml(photoId);
+    if (count && comments[photoId] && comments[photoId].loaded) count.textContent = comments[photoId].list.length;
+  }
+
+  function syncCommentCount(photoId) {
+    var c = comments[photoId];
+    var p = photoById(photoId);
+    if (!c || !c.loaded || !p || p.commentCount === c.list.length) return;
+    replacePhoto(Object.assign({}, p, { commentCount: c.list.length }));
+    renderGrid();
+  }
+
+  async function loadComments(photoId) {
+    var entry = comments[photoId] || (comments[photoId] = { list: [], loaded: false, error: null });
+    try {
+      var data = await api('/photo-comments?photoId=' + photoId);
+      entry.list = data.comments || [];
+      entry.loaded = true;
+      entry.error = null;
+    } catch (err) {
+      if (!entry.loaded) entry.error = err.message;
+    }
+    refreshCommentList(photoId);
+    syncCommentCount(photoId);
+  }
+
+  function ensureComments(photoId) {
+    if (!comments[photoId]) loadComments(photoId);
+  }
+
+  async function addComment(form) {
+    var photoId = state.lightboxId;
+    var check = P.validateComment(form.content.value);
+    if (check.error) { alert(check.error); return; }
+    if (commentBusy) return;
+    commentBusy = true;
+    form.querySelector('button[type="submit"]').disabled = true;
+    try {
+      var created = await api('/photo-comments', jsonOpts('POST', { photoId: photoId, travelerId: state.me, content: check.value }));
+      var entry = comments[photoId] || (comments[photoId] = { list: [], loaded: true, error: null });
+      entry.list.push(created);
+      entry.loaded = true;
+      form.content.value = '';
+      refreshCommentList(photoId);
+      syncCommentCount(photoId);
+    } catch (err) {
+      alert('댓글을 저장하지 못했어요: ' + err.message);
+    } finally {
+      commentBusy = false;
+      var btn = form.querySelector('button[type="submit"]');
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function saveCommentEdit(form) {
+    var id = Number(form.getAttribute('data-id'));
+    var photoId = state.lightboxId;
+    var check = P.validateComment(form.content.value);
+    if (check.error) { alert(check.error); return; }
+    commentBusy = true;
+    try {
+      var updated = await api('/photo-comments?id=' + id, jsonOpts('PATCH', { travelerId: state.me, content: check.value }));
+      var entry = comments[photoId];
+      if (entry) entry.list = entry.list.map(function (c) { return c.id === id ? updated : c; });
+      editingCommentId = null;
+    } catch (err) {
+      alert('댓글을 수정하지 못했어요: ' + err.message);
+    } finally {
+      commentBusy = false;
+      refreshCommentList(photoId);
+    }
+  }
+
+  async function deleteComment(id) {
+    if (!confirm('이 댓글을 삭제할까요?')) return;
+    var photoId = state.lightboxId;
+    try {
+      await api('/photo-comments?id=' + id + '&travelerId=' + state.me, { method: 'DELETE' });
+      var entry = comments[photoId];
+      if (entry) entry.list = entry.list.filter(function (c) { return c.id !== id; });
+      refreshCommentList(photoId);
+      syncCommentCount(photoId);
+    } catch (err) {
+      alert('댓글을 삭제하지 못했어요: ' + err.message);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ⓘ 촬영 정보 패널
+  // ---------------------------------------------------------------------------
+  function infoRow(icon, label, valueHtml) {
+    return '<div class="ph-info-row"><span class="ph-info-ico" aria-hidden="true">' + icon + '</span>' +
+      '<span class="ph-info-label">' + label + '</span><span class="ph-info-val">' + valueHtml + '</span></div>';
+  }
+
+  var editedTag = '<span class="ph-tag">✎ 수정됨</span>';
+
+  function infoPanelHtml(p, mine) {
+    if (mine && state.editingMeta) return editFormHtml(p);
+    var edited = P.isEdited(p);
+    var rows = [];
+
+    var when = P.formatDateTimeKo(p.takenAt);
+    var note = p.takenAtSource !== 'manual' ? P.takenAtNote(p.takenAtSource) : '';
+    rows.push(infoRow('📅', '촬영', when
+      ? esc(when) + (note ? ' <span class="ph-muted">(' + esc(note) + ')</span>' : '') + (edited.time ? ' ' + editedTag : '')
+      : '<span class="ph-muted">알 수 없음</span>'));
+
+    var hasCoords = p.lat !== null && p.lat !== undefined;
+    if (hasCoords || p.placeName) {
+      var place = [];
+      if (p.placeName) place.push('<b>' + esc(p.placeName) + '</b>');
+      if (hasCoords) place.push('<span class="ph-muted">' + esc(P.formatCoords(p.lat, p.lng)) + '</span>');
+      var links = P.mapLinks(p.lat, p.lng, p.placeName);
+      if (links) {
+        place.push('<span class="ph-maplinks"><a href="' + esc(links.kakao) + '" target="_blank" rel="noopener">카카오맵</a>' +
+          '<a href="' + esc(links.google) + '" target="_blank" rel="noopener">구글 지도</a></span>');
+      }
+      rows.push(infoRow('📍', '위치', place.join('<br>') + (edited.location ? ' ' + editedTag : '')));
+    } else {
+      rows.push(infoRow('📍', '위치', '<span class="ph-muted">위치 정보 없음</span>'));
+    }
+
+    P.summarizeCamera(p.camera).forEach(function (line) {
+      var icon = { device: '📷', lens: '🔭', exposure: '⚙️', flash: '⚡' }[line.key] || '•';
+      rows.push(infoRow(icon, line.label, esc(line.text)));
+    });
+
+    if (p.mediaType === 'video' && p.durationSec) {
+      rows.push(infoRow('🎞', '길이', P.formatDuration(p.durationSec)));
+    }
+    if (p.width && p.height) {
+      rows.push(infoRow('🖼', '크기', p.width + '×' + p.height + ' <span class="ph-muted">(앨범 저장본)</span>'));
+    }
+
+    var editBtn = mine && lightboxActions['edit-meta']
+      ? '<button type="button" class="ph-act" data-action="edit-meta">✎ 시간·위치 수정</button>' : '';
+    return '<div class="ph-info" data-slot="info">' + rows.join('') +
+      (editBtn ? '<div class="ph-lb-actions">' + editBtn + '</div>' : '') + '</div>';
+  }
+
+  var touchX = null;
+  function bindLightbox() {
+    els.lightbox.addEventListener('click', function (e) {
+      var t = e.target.closest('[data-action]');
+      if (!t) {
+        if (e.target === els.lightbox) closeLightbox();
+        return;
+      }
+      var a = t.getAttribute('data-action');
+      if (a === 'close') closeLightbox();
+      else if (a === 'prev') step(-1);
+      else if (a === 'next') step(1);
+      else if (a === 'delete') deletePhoto(state.lightboxId);
+      else if (lightboxActions[a]) lightboxActions[a](t, e);
+    });
+    // 버튼을 누르면 라이트박스 내용이 다시 그려져 포커스가 사라지므로 문서 전체에서 키를 받습니다.
+    document.addEventListener('keydown', function (e) {
+      if (state.lightboxId === null) return;
+      if (e.target.matches && e.target.matches('input, textarea, select')) {
+        // 입력창에서 Esc: 쓰던 글이 없으면 닫고, 있으면 글을 지키려고 포커스만 뺍니다.
+        if (e.key === 'Escape') {
+          if (String(e.target.value || '').trim() || state.editingMeta || editingCommentId !== null) e.target.blur();
+          else closeLightbox();
+        }
+        return;
+      }
+      if (e.key === 'Escape') closeLightbox();
+      else if (e.key === 'ArrowLeft') step(-1);
+      else if (e.key === 'ArrowRight') step(1);
+    });
+    els.lightbox.addEventListener('submit', function (e) {
+      var f = e.target;
+      if (f.matches('.ph-edit')) { e.preventDefault(); submitEdit(f); }
+      else if (f.matches('.ph-cmt-form')) { e.preventDefault(); addComment(f); }
+      else if (f.matches('.ph-cmt-edit-form')) { e.preventDefault(); saveCommentEdit(f); }
+    });
+    els.lightbox.addEventListener('change', function (e) {
+      if (e.target.name === 'place' && e.target.closest('.ph-edit')) {
+        var custom = e.target.form.placeName;
+        custom.hidden = e.target.value !== 'custom';
+        if (!custom.hidden) custom.focus();
+      }
+    });
+    els.lightbox.addEventListener('touchstart', function (e) {
+      if (!e.target.closest('.ph-lb-stage')) return;
+      touchX = e.touches[0].clientX;
+    }, { passive: true });
+    els.lightbox.addEventListener('touchend', function (e) {
+      if (touchX === null) return;
+      var dx = e.changedTouches[0].clientX - touchX;
+      touchX = null;
+      if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 시간·위치 수정 (본인 사진만)
+  // ---------------------------------------------------------------------------
+  function placeOptionsHtml(p) {
+    var current = p.placeName || (p.lat !== null && p.lat !== undefined ? P.formatCoords(p.lat, p.lng) : '위치 없음');
+    var groups = {};
+    tripPlaces().forEach(function (pl) {
+      var key = pl.day ? pl.day + '일차' : '기타';
+      (groups[key] = groups[key] || []).push(pl);
+    });
+    var html = '<option value="keep">그대로 두기 — ' + esc(current) + '</option>';
+    Object.keys(groups).forEach(function (g) {
+      html += '<optgroup label="' + esc(g) + ' 장소">' + groups[g].map(function (pl) {
+        return '<option value="preset:' + esc(pl.id) + '">' + esc(pl.name) + '</option>';
+      }).join('') + '</optgroup>';
+    });
+    html += '<option value="custom">직접 입력…</option>';
+    html += '<option value="clear">위치 지우기</option>';
+    return html;
+  }
+
+  function editFormHtml(p) {
+    var edited = P.isEdited(p);
+    var o = p.original || {};
+    var canResetTime = edited.time && !!o.takenAt;
+    var canResetLoc = edited.location;
+    return '<form class="ph-edit" data-slot="edit" autocomplete="off">' +
+      '<label class="ph-edit-label"><span>촬영 시각 <span class="ph-muted">(한국 시간)</span></span>' +
+      '<input type="datetime-local" name="takenAt" value="' + esc(P.toKstInputValue(p.takenAt)) + '"></label>' +
+      (canResetTime ? '<button type="button" class="ph-linkbtn" data-action="reset-time">↺ 원래 시각으로 (' +
+        esc(P.formatShortDateTimeKo(o.takenAt)) + ')</button>' : '') +
+      '<label class="ph-edit-label">일차<select name="day">' + dayOptions(p.day) + '</select></label>' +
+      '<label class="ph-edit-label">장소<select name="place">' + placeOptionsHtml(p) + '</select></label>' +
+      '<input type="text" name="placeName" class="ph-edit-custom" maxlength="' + P.LIMITS.placeNameMax +
+      '" placeholder="장소 이름 (예: 지족해협 죽방렴)" hidden>' +
+      (canResetLoc ? '<button type="button" class="ph-linkbtn" data-action="reset-location">↺ 원래 위치로' +
+        (o.lat !== null && o.lat !== undefined ? '' : ' (위치 없음)') + '</button>' : '') +
+      '<label class="ph-edit-label">캡션<input type="text" name="caption" maxlength="' + P.LIMITS.captionMax +
+      '" value="' + esc(p.caption || '') + '" placeholder="한 줄 캡션 (선택)"></label>' +
+      '<div class="ph-lb-actions">' +
+      '<button type="submit" class="ph-act on"' + (state.saving ? ' disabled' : '') + '>' + (state.saving ? '저장 중…' : '저장') + '</button>' +
+      '<button type="button" class="ph-act" data-action="edit-cancel">취소</button>' +
+      '</div></form>';
+  }
+
+  async function patchPhoto(id, body) {
+    state.saving = true;
+    try {
+      var updated = await api('/photos?id=' + id, jsonOpts('PATCH', Object.assign({ travelerId: state.me }, body)));
+      state.photos = state.photos.map(function (x) {
+        return x.id === id ? Object.assign({}, updated, { likeCount: x.likeCount, likedBy: x.likedBy, commentCount: x.commentCount }) : x;
+      });
+      state.editingMeta = false;
+      return true;
+    } catch (err) {
+      alert(err.message);
+      return false;
+    } finally {
+      state.saving = false;
+      render();
+      renderLightbox();
+    }
+  }
+
+  function submitEdit(form) {
+    var p = photoById(state.lightboxId);
+    if (!p) return;
+    var body = {};
+    var t = P.fromKstInputValue(form.takenAt.value);
+    if (t === undefined || t === null) { alert('촬영 시각을 올바르게 입력해 주세요.'); return; }
+    if (t !== p.takenAt) body.takenAt = t;
+    body.day = form.day.value === '' ? null : Number(form.day.value);
+    var caption = P.validateCaption(form.caption.value);
+    if (caption.error) { alert(caption.error); return; }
+    body.caption = caption.value;
+
+    var choiceVal = form.place.value;
+    var choice = choiceVal.indexOf('preset:') === 0 ? { type: 'preset', id: choiceVal.slice(7) }
+      : choiceVal === 'custom' ? { type: 'custom', name: form.placeName.value }
+        : { type: choiceVal };
+    if (choice.type === 'custom' && !String(choice.name).trim()) { alert('장소 이름을 입력해 주세요.'); return; }
+    var loc = P.locationChoice(choice, p, tripPlaces());
+    if (loc) Object.assign(body, loc);
+    patchPhoto(p.id, body);
+  }
+
+  /** 라이트박스 버튼 동작 (data-action 이름 → 함수). */
+  var lightboxActions = {
+    'comment-edit': function (t) {
+      editingCommentId = Number(t.getAttribute('data-id'));
+      var list = els.lightbox.querySelector('[data-slot="comment-list"]');
+      if (list) list.innerHTML = commentListHtml(state.lightboxId);
+      var ta = els.lightbox.querySelector('.ph-cmt-edit-form textarea');
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    },
+    'comment-edit-cancel': function () {
+      editingCommentId = null;
+      var list = els.lightbox.querySelector('[data-slot="comment-list"]');
+      if (list) list.innerHTML = commentListHtml(state.lightboxId);
+    },
+    'comment-delete': function (t) {
+      deleteComment(Number(t.getAttribute('data-id')));
+    },
+    like: function () {
+      toggleLike(state.lightboxId);
+    },
+    info: function () {
+      state.infoOpen = !state.infoOpen;
+      if (!state.infoOpen) state.editingMeta = false;
+      renderLightbox();
+    },
+    'edit-meta': function () {
+      state.editingMeta = true;
+      renderLightbox();
+    },
+    'edit-cancel': function () {
+      state.editingMeta = false;
+      renderLightbox();
+    },
+    'reset-time': function () {
+      if (!confirm('촬영 시각을 파일에서 읽은 원래 값으로 되돌릴까요?')) return;
+      patchPhoto(state.lightboxId, { reset: ['time'] });
+    },
+    'reset-location': function () {
+      if (!confirm('위치를 파일에서 읽은 원래 값으로 되돌릴까요?')) return;
+      var p = photoById(state.lightboxId);
+      var o = (p && p.original) || {};
+      var near = P.nearestPlace(o.lat, o.lng, tripPlaces());
+      patchPhoto(state.lightboxId, { reset: ['location'], placeName: near ? near.name : null });
+    },
+  };
+
+  // ---------------------------------------------------------------------------
+  // 이벤트 연결
+  // ---------------------------------------------------------------------------
+  function bind() {
+    els.me.addEventListener('change', function (e) {
+      if (e.target.id !== 'ph-me-select') return;
+      var v = parseInt(e.target.value, 10);
+      saveMe(Number.isInteger(v) ? v : null);
+      renderPending();
+      if (state.lightboxId !== null) renderLightbox();
+    });
+
+    els.file.addEventListener('change', function () {
+      addFiles(els.file.files);
+      els.file.value = '';
+    });
+
+    els.tabs.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-filter]');
+      if (!b) return;
+      var f = b.getAttribute('data-filter');
+      state.filter = /^\d+$/.test(f) ? Number(f) : f;
+      render();
+    });
+
+    els.grid.addEventListener('click', function (e) {
+      var cell = e.target.closest('.ph-cell');
+      if (cell) openLightbox(Number(cell.getAttribute('data-id')));
+    });
+
+    els.pending.addEventListener('click', function (e) {
+      var rm = e.target.closest('[data-remove]');
+      if (rm) { removePending(rm.getAttribute('data-remove')); return; }
+      var act = e.target.closest('[data-action]');
+      if (!act) return;
+      if (act.getAttribute('data-action') === 'upload') uploadAll();
+      if (act.getAttribute('data-action') === 'clear') {
+        state.pending.forEach(function (it) { if (it.previewUrl) URL.revokeObjectURL(it.previewUrl); });
+        state.pending = [];
+        renderPending();
+      }
+    });
+
+    // 입력값은 다시 그리지 않고 상태에만 반영 (타이핑 중 포커스 유지)
+    els.pending.addEventListener('input', function (e) {
+      var key = e.target.getAttribute('data-key');
+      var field = e.target.getAttribute('data-field');
+      var it = state.pending.find(function (x) { return x.key === key; });
+      if (!it || !field) return;
+      if (field === 'caption') it.caption = e.target.value;
+      if (field === 'day') it.day = e.target.value === '' ? null : Number(e.target.value);
+    });
+    els.pending.addEventListener('change', function (e) {
+      if (e.target.getAttribute('data-field') === 'day') {
+        var it = state.pending.find(function (x) { return x.key === e.target.getAttribute('data-key'); });
+        if (it) it.day = e.target.value === '' ? null : Number(e.target.value);
+      }
+    });
+
+    bindLightbox();
+  }
+
+  function init() {
+    els.root = $('#photos');
+    if (!els.root) return;
+    els.status = $('#ph-status', els.root);
+    els.me = $('#ph-me', els.root);
+    els.file = $('#ph-file', els.root);
+    els.pending = $('#ph-pending', els.root);
+    els.tabs = $('#ph-tabs', els.root);
+    els.grid = $('#ph-grid', els.root);
+    els.lightbox = $('#ph-lightbox');
+    state.me = readMe();
+    bind();
+    load();
+    startPolling();
+  }
+
+  // 이후 단계(촬영 정보, 좋아요, 댓글, 영상, 슬라이드)에서 확장할 수 있도록 내부를 노출합니다.
+  window.PhotoUI = {
+    state: state,
+    els: els,
+    api: api,
+    jsonOpts: jsonOpts,
+    esc: esc,
+    nameOf: nameOf,
+    formatWhen: formatWhen,
+    photoById: photoById,
+    visiblePhotos: visiblePhotos,
+    render: render,
+    renderLightbox: renderLightbox,
+    renderPending: renderPending,
+    load: load,
+    lightboxExtras: lightboxExtras,
+    lightboxActions: lightboxActions,
+    preparers: preparers,
+    uploaders: uploaders,
+    uploadBlob: uploadBlob,
+    applyTimeAndPlace: applyTimeAndPlace,
+    randId: randId,
+  };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();

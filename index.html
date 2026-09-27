@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
 <title>남해 바래길 3일 도보여행</title>
 <style>
   :root{
@@ -24,7 +25,7 @@
     color:var(--ink);
     line-height:1.55;
   }
-  #schedule,#settle,#notes{scroll-margin-top:70px;}
+  #schedule,#photos-intro,#settle,#notes{scroll-margin-top:70px;}
   .topnav{
     position:sticky;
     top:0;
@@ -632,6 +633,167 @@
     padding:10px 14px;font-size:14px;
   }
   .st-transfer-amt{margin-left:auto;font-weight:800;color:#35618a;}
+  /* ---------- 사진 앨범 ---------- */
+  .photo-box{
+    background:var(--card);
+    border-radius:18px;
+    margin-top:14px;
+    padding:20px 18px 22px;
+    box-shadow:0 2px 14px rgba(64,52,24,.08);
+  }
+  .photo-box .intro{color:var(--sub);font-size:13px;margin:0 0 14px;}
+  .ph-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:12px;}
+  .ph-toolbar .grow{flex:1;min-width:120px;}
+  .ph-me-select{
+    width:100%;padding:9px 11px;font-size:14px;color:var(--ink);font-family:inherit;
+    border:1px solid #ddd0ac;border-radius:9px;background:#fff;
+  }
+  .ph-hint{font-size:12.5px;color:var(--sub);}
+  .ph-hint a{color:var(--sea);font-weight:700;}
+  .ph-upload{position:relative;display:inline-flex;align-items:center;gap:4px;}
+  .ph-upload input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;}
+  .st-btn.ghost{background:transparent;color:var(--sea);border:1.4px solid var(--sea);}
+  .st-btn.ghost:hover{background:#eef2e6;}
+  .ph-muted{color:var(--sub);}
+  .ph-err{color:#a13b3b;font-size:12.5px;}
+  .ph-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;}
+  .ph-tab{
+    border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;
+    padding:6px 12px;font-size:13px;font-family:inherit;cursor:pointer;white-space:nowrap;
+  }
+  .ph-tab .n{color:var(--sub);font-size:11.5px;}
+  .ph-tab.active{background:var(--sea);border-color:var(--sea);color:#fff;}
+  .ph-tab.active .n{color:#dfe9dd;}
+  .ph-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;}
+  .ph-cell{
+    position:relative;padding:0;border:none;background:#e9e2cc;aspect-ratio:1/1;
+    overflow:hidden;border-radius:6px;cursor:pointer;
+  }
+  .ph-cell img{width:100%;height:100%;object-fit:cover;display:block;}
+  .ph-badges{position:absolute;right:4px;bottom:4px;display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;}
+  .ph-badge{
+    background:rgba(28,28,24,.62);color:#fff;font-size:10.5px;font-weight:700;
+    padding:2px 6px;border-radius:999px;line-height:1.4;
+  }
+  .ph-empty{grid-column:1/-1;text-align:center;color:var(--sub);font-size:13px;padding:24px 8px;margin:0;}
+
+  .ph-pending{border:1px dashed #d6c79f;border-radius:14px;padding:12px;margin-bottom:12px;background:#fbfaf6;}
+  .ph-pend-head{font-size:13.5px;margin-bottom:8px;}
+  .ph-pend-row{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid #efe8d6;}
+  .ph-pend-thumb{flex-shrink:0;width:64px;height:64px;border-radius:8px;overflow:hidden;background:#eee6cf;
+    display:flex;align-items:center;justify-content:center;}
+  .ph-pend-thumb img{width:100%;height:100%;object-fit:cover;}
+  .ph-pend-body{flex:1;min-width:0;font-size:12.5px;}
+  .ph-pend-name{font-weight:600;word-break:break-all;}
+  .ph-pend-meta{margin-bottom:6px;line-height:1.5;}
+  .ph-pend-fields{display:flex;gap:6px;flex-wrap:wrap;}
+  .ph-pend-fields select,.ph-pend-fields input{
+    padding:7px 9px;font-size:13px;border:1px solid #ddd0ac;border-radius:8px;background:#fff;font-family:inherit;color:var(--ink);
+  }
+  .ph-pend-fields input{flex:1;min-width:140px;}
+  .ph-x{border:none;background:none;font-size:20px;line-height:1;color:var(--sub);cursor:pointer;padding:0 4px;}
+  .ph-progress{height:5px;background:#eee6cf;border-radius:999px;margin-top:7px;overflow:hidden;}
+  .ph-progress span{display:block;height:100%;background:var(--accent);transition:width .2s;}
+  .ph-pend-actions{display:flex;align-items:center;gap:10px;margin-top:10px;}
+
+  body.ph-noscroll{overflow:hidden;}
+  .ph-lightbox{
+    position:fixed;inset:0;z-index:100;background:#12120f;color:#f3efe2;
+    display:flex;flex-direction:column;outline:none;
+  }
+  .ph-lightbox[hidden]{display:none;}
+  .ph-lb-top{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;font-size:13px;}
+  .ph-lb-close{border:none;background:none;color:#fff;font-size:30px;line-height:1;cursor:pointer;padding:0 4px;}
+  .ph-lb-stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;}
+  .ph-lb-media{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}
+  .ph-lb-media img,.ph-lb-media video{max-width:100%;max-height:100%;object-fit:contain;}
+  .ph-lb-nav{
+    position:absolute;top:50%;transform:translateY(-50%);z-index:2;border:none;
+    background:rgba(255,255,255,.14);color:#fff;font-size:28px;width:42px;height:42px;border-radius:50%;cursor:pointer;
+  }
+  .ph-lb-nav.prev{left:8px;}
+  .ph-lb-nav.next{right:8px;}
+  .ph-lb-panel{
+    background:#1f1e1a;padding:12px 16px 16px;max-height:46vh;overflow-y:auto;font-size:13.5px;
+  }
+  .ph-lb-panel .ph-muted{color:#b1a991;}
+  .ph-lb-caption{margin:6px 0 0;}
+  .ph-lb-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+  .ph-act{
+    border:1px solid #4a473e;background:#2a2924;color:#f3efe2;border-radius:999px;
+    padding:6px 12px;font-size:12.5px;cursor:pointer;text-decoration:none;font-family:inherit;
+  }
+  .ph-act:hover{background:#34332c;}
+  .ph-act.on{background:#5a2f25;border-color:#c2703f;color:#ffd9c7;}
+  .ph-act.danger{color:#ffb4a8;}
+  .ph-act.like.on{background:#6b2a22;border-color:#e0795c;color:#ffd0c2;}
+  .ph-likers{margin-top:8px;font-size:12.5px;color:#e8c9bb;}
+  .ph-comments{margin-top:12px;border-top:1px solid #34332c;padding-top:10px;}
+  .ph-cmt-title{font-size:13px;font-weight:700;margin-bottom:6px;}
+  .ph-cmt-list{list-style:none;margin:0;padding:0;}
+  .ph-cmt{padding:7px 0;border-bottom:1px solid #2c2b26;}
+  .ph-cmt-head{font-size:12.5px;display:flex;flex-wrap:wrap;align-items:center;gap:2px;}
+  .ph-cmt-tools{margin-left:auto;display:inline-flex;gap:10px;}
+  .ph-cmt-body{font-size:13.5px;margin-top:2px;white-space:pre-wrap;word-break:break-word;}
+  .ph-cmt-empty{font-size:12.5px;padding:6px 0;}
+  .ph-cmt-form{display:flex;gap:6px;margin-top:10px;}
+  .ph-cmt-form input,.ph-cmt-edit-form textarea{
+    flex:1;min-width:0;padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid #4a473e;
+    background:#2a2924;color:#f3efe2;font-family:inherit;
+  }
+  .ph-cmt-edit-form textarea{width:100%;resize:vertical;}
+  .ph-cmt-form input::placeholder{color:#8a8271;}
+  .ph-info{margin-top:10px;border-top:1px solid #34332c;padding-top:8px;}
+  .ph-info-row{display:flex;gap:8px;padding:5px 0;font-size:13px;line-height:1.5;}
+  .ph-info-ico{width:18px;flex-shrink:0;text-align:center;}
+  .ph-info-label{width:48px;flex-shrink:0;color:#b1a991;}
+  .ph-info-val{flex:1;min-width:0;word-break:break-word;}
+  .ph-maplinks{display:inline-flex;gap:10px;margin-top:2px;}
+  .ph-maplinks a{color:#ffd9c7;font-weight:600;}
+  .ph-tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:#3b3a33;color:#e8dcc0;margin-left:4px;}
+  .ph-edit{margin-top:10px;border-top:1px solid #34332c;padding-top:10px;display:flex;flex-direction:column;gap:8px;}
+  .ph-edit-label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:#b1a991;}
+  .ph-edit input,.ph-edit select{
+    padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid #4a473e;background:#2a2924;color:#f3efe2;font-family:inherit;
+  }
+  .ph-edit input::placeholder{color:#8a8271;}
+  .ph-linkbtn{align-self:flex-start;border:none;background:none;color:#ffd9c7;font-size:12.5px;cursor:pointer;padding:0;text-decoration:underline;font-family:inherit;}
+  /* ---------- 슬라이드 영상 ---------- */
+  .ph-reel{position:fixed;inset:0;z-index:110;background:#12120f;color:#f3efe2;overflow-y:auto;}
+  .ph-reel[hidden]{display:none;}
+  .rl-sheet,.rl-player{max-width:880px;margin:0 auto;padding:12px 16px 24px;}
+  .rl-head{display:flex;justify-content:space-between;align-items:center;font-size:15px;padding:4px 0 8px;}
+  .rl-intro{color:#b1a991;font-size:13px;margin:0 0 12px;}
+  .rl-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .rl-grid label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:#b1a991;}
+  .rl-grid select,.rl-grid input[type=file]{
+    padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid #4a473e;background:#2a2924;color:#f3efe2;font-family:inherit;min-width:0;
+  }
+  .rl-checks{display:flex;flex-wrap:wrap;gap:8px 14px;margin:12px 0 4px;font-size:13.5px;}
+  .rl-check input{accent-color:#c2703f;width:16px;height:16px;vertical-align:-3px;}
+  .rl-summary{font-size:14px;font-weight:700;margin:12px 0;color:#ffd9c7;}
+  .rl-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .rl-actions a.st-btn{text-decoration:none;display:inline-block;}
+  .st-btn.ghost.light{color:#f3efe2;border-color:#8a8271;}
+  .st-btn.ghost.light:hover{background:#2a2924;}
+  .rl-note{font-size:12px;color:#b1a991;margin:10px 0 0;}
+  .rl-stage{position:relative;background:#000;border-radius:10px;overflow:hidden;display:flex;justify-content:center;}
+  .rl-stage:fullscreen{border-radius:0;align-items:center;}
+  .rl-canvas{display:block;width:100%;height:auto;}
+  .rl-canvas.portrait{width:auto;max-width:100%;height:min(70vh,760px);}
+  .rl-stage:fullscreen .rl-canvas{width:auto;height:auto;max-width:100vw;max-height:100vh;}
+  .rl-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;color:#e8dcc0;background:rgba(0,0,0,.6);}
+  .rl-loading[hidden]{display:none;}
+  .rl-controls{display:flex;align-items:center;gap:10px;margin-top:10px;}
+  .rl-controls input[type=range]{flex:1;accent-color:#c2703f;}
+  .rl-clock{font-size:12.5px;color:#b1a991;min-width:80px;text-align:right;font-variant-numeric:tabular-nums;}
+  .rl-rec{margin-top:10px;font-size:13px;background:#2a2924;border-radius:10px;padding:10px 12px;}
+  .rl-rec[hidden]{display:none;}
+  .rl-rec .ph-progress{margin-top:8px;}
+  @media (max-width:420px){ .rl-grid{grid-template-columns:1fr;} }
+  @media (min-width:700px){
+    .ph-grid{grid-template-columns:repeat(4,1fr);}
+  }
 </style>
 </head>
 <body>
@@ -643,6 +805,7 @@
   </a>
   <div class="nav-links">
     <a href="#schedule">일정</a>
+    <a href="#photos-intro">사진</a>
     <a href="#settle">지출·정산</a>
     <a href="#notes">준비물</a>
   </div>
@@ -889,6 +1052,30 @@
 
   </div>
 
+  <div class="section-intro" id="photos-intro">
+    <span class="icon">📷</span>
+    <div>
+      <h2>사진 앨범</h2>
+      <p>걸으면서 찍은 사진을 한곳에 모아요</p>
+    </div>
+  </div>
+
+  <!-- 사진·영상 앨범 (인터랙티브) -->
+  <section class="photo-box" id="photos">
+    <p class="intro">각자 찍은 사진·영상(1분 이하)을 올리면 모두가 같은 앨범을 봐요. 촬영 시간 순으로 정리되고, 일차별로 모아볼 수 있어요.</p>
+    <div class="st-status" id="ph-status"></div>
+    <div class="ph-toolbar">
+      <div class="grow" id="ph-me"></div>
+      <label class="st-btn ph-upload">＋ 올리기
+        <input type="file" id="ph-file" accept="image/*,video/*" multiple>
+      </label>
+      <button type="button" class="st-btn ghost" id="ph-reel-btn">▶ 슬라이드 영상</button>
+    </div>
+    <div class="ph-pending" id="ph-pending" hidden></div>
+    <div class="ph-tabs" id="ph-tabs" role="toolbar" aria-label="일차별 보기"></div>
+    <div class="ph-grid" id="ph-grid"></div>
+  </section>
+
   <!-- 참고: 숙소비 -->
   <div class="cost-box">
     <h2>🏠 숙소비 참고</h2>
@@ -972,9 +1159,20 @@
   남해 바래길 3일 도보여행 계획 🐾
 </footer>
 
+<div class="ph-lightbox" id="ph-lightbox" role="dialog" aria-modal="true" aria-label="사진 크게 보기" tabindex="-1" hidden></div>
+<div class="ph-reel" id="ph-reel" hidden></div>
+
 <script src="assets/carousel.js"></script>
 <script src="assets/settle-core.js"></script>
 <script src="assets/settle-ui.js"></script>
+<script src="assets/vendor/exifr.lite.umd.js"></script>
+<script src="assets/vendor/vercel-blob-client.js"></script>
+<script src="assets/places.js"></script>
+<script src="assets/photo-core.js"></script>
+<script src="assets/photo-ui.js"></script>
+<script src="assets/vendor/fix-webm-duration.js"></script>
+<script src="assets/reel-core.js"></script>
+<script src="assets/reel-ui.js"></script>
 <script>
   document.querySelectorAll('.carousel').forEach(function (el) {
     Carousel.initCarousel(el);

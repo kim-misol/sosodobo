@@ -38,6 +38,51 @@ async function ensureSchema() {
         key TEXT PRIMARY KEY,
         value TEXT
       )`;
+      // 사진·영상 앨범. 파일은 Vercel Blob 에 두고 여기엔 주소와 촬영 정보만 저장합니다.
+      // taken_at/lat/lng/place_name 은 사용자가 고칠 수 있는 현재 값,
+      // original_* 은 파일에서 읽은 원본 값('원래대로' 되돌리기용)입니다.
+      await sql`CREATE TABLE IF NOT EXISTS photos (
+        id SERIAL PRIMARY KEY,
+        uploader_id INTEGER REFERENCES travelers(id) ON DELETE SET NULL,
+        media_type TEXT NOT NULL DEFAULT 'image' CHECK (media_type IN ('image', 'video')),
+        url TEXT NOT NULL,
+        thumb_url TEXT NOT NULL,
+        width INTEGER,
+        height INTEGER,
+        duration_sec REAL,
+        caption TEXT,
+        day SMALLINT,
+        taken_at TIMESTAMPTZ,
+        taken_at_source TEXT,
+        lat DOUBLE PRECISION,
+        lng DOUBLE PRECISION,
+        place_name TEXT,
+        location_source TEXT,
+        original_taken_at TIMESTAMPTZ,
+        original_taken_at_source TEXT,
+        original_lat DOUBLE PRECISION,
+        original_lng DOUBLE PRECISION,
+        camera JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`;
+      // 좋아요: (사진, 여행자) 한 쌍이 한 번만 — 1인 1좋아요를 DB 가 보장합니다.
+      await sql`CREATE TABLE IF NOT EXISTS photo_likes (
+        photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+        traveler_id INTEGER NOT NULL REFERENCES travelers(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (photo_id, traveler_id)
+      )`;
+      // 댓글: updated_at 이 NULL 이 아니면 "(수정됨)" 으로 표시합니다.
+      await sql`CREATE TABLE IF NOT EXISTS photo_comments (
+        id SERIAL PRIMARY KEY,
+        photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+        author_id INTEGER REFERENCES travelers(id) ON DELETE SET NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS photo_comments_photo_idx ON photo_comments (photo_id, created_at)`;
       // 기존 준비물 항목은 최초 1회만 채워 넣습니다.
       // (사용자가 나중에 전부 지워도 다시 생기지 않도록 플래그로 제어)
       const seeded = await sql`SELECT 1 FROM app_meta WHERE key = 'notes_seeded'`;
