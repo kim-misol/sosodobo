@@ -40,6 +40,24 @@ test('computeBalances: single expense split among all', () => {
   assert.deepEqual(balances.map((b) => b.net), [20000, -10000, -10000]);
 });
 
+test('computeBalances: payer among 3 participants nets the other two owing evenly (regression: reported bug)', () => {
+  // A가 15000원 결제, A·B·C 셋이 참여 → A는 10000원 받아야 하고 B·C는 5000원씩 내야 함
+  const balances = computeBalances(travelers, [
+    { id: 12, amount: 15000, payerId: 1, participantIds: [1, 2, 3] },
+  ]);
+  const byId = Object.fromEntries(balances.map((b) => [b.id, b]));
+  assert.equal(byId[1].net, 10000);
+  assert.equal(byId[2].net, -5000);
+  assert.equal(byId[3].net, -5000);
+
+  const transfers = settleUp(balances);
+  assert.equal(transfers.length, 2);
+  const total = transfers
+    .filter((t) => t.toId === 1)
+    .reduce((sum, t) => sum + t.amount, 0);
+  assert.equal(total, 10000);
+});
+
 test('computeBalances: payer not among participants still credited', () => {
   // 가가 20000 결제하지만 정산 대상은 나·다 둘뿐
   const balances = computeBalances(travelers, [
