@@ -538,6 +538,34 @@
     return m + ':' + (r < 10 ? '0' : '') + r;
   }
 
+  // ---------------------------------------------------------------------------
+  // 업로드 오류 문구 · 영상 썸네일 확인
+  // ---------------------------------------------------------------------------
+
+  var STORAGE_MISSING_TEXT = '사진 저장소(Vercel Blob)가 아직 연결되지 않아 올릴 수 없어요. 연결된 뒤 "다시 올리기"를 눌러 주세요.';
+
+  /** 업로드 실패 이유를 사람이 알아볼 수 있는 문구로. storageMissing 이면 다른 항목도 같은 이유로 실패합니다. */
+  function uploadErrorMessage(message) {
+    var m = String(message || '');
+    if (/client token|BLOB_READ_WRITE_TOKEN|저장소가 아직 연결/i.test(m)) {
+      return { storageMissing: true, text: STORAGE_MISSING_TEXT };
+    }
+    if (/failed to fetch|network|load failed/i.test(m)) {
+      return { storageMissing: false, text: '네트워크가 불안정해 올리지 못했어요. 연결을 확인하고 "다시 올리기"를 눌러 주세요.' };
+    }
+    if (!m) return { storageMissing: false, text: '올리지 못했어요. "다시 올리기"를 눌러 주세요.' };
+    return { storageMissing: false, text: m.replace(/^Vercel Blob:\s*/, '') };
+  }
+
+  /** RGBA 픽셀이 거의 검은색인지 (일부 영상은 첫 프레임이 검게 나옴). */
+  function isMostlyBlack(pixels) {
+    var n = pixels ? Math.floor(pixels.length / 4) : 0;
+    if (!n) return true;
+    var sum = 0;
+    for (var i = 0; i < n; i++) sum += (pixels[i * 4] + pixels[i * 4 + 1] + pixels[i * 4 + 2]) / 3;
+    return sum / n < 16;
+  }
+
   var PATH_PREFIX = { photo: 'photos/', thumb: 'photos/thumbs/', video: 'photos/videos/' };
 
   /** Blob 업로드 경로. rand 는 영숫자만 남겨 경로 조작을 막습니다. */
@@ -588,6 +616,9 @@
     videoThumbTime: videoThumbTime,
     videoFileInfo: videoFileInfo,
     formatDuration: formatDuration,
+    uploadErrorMessage: uploadErrorMessage,
+    isMostlyBlack: isMostlyBlack,
+    STORAGE_MISSING_TEXT: STORAGE_MISSING_TEXT,
     _toValidMs: toValidMs,
     _validateText: validateText,
   };

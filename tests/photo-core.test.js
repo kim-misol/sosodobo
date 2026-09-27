@@ -450,3 +450,28 @@ test('formatDuration shows m:ss', () => {
   assert.equal(P.formatDuration(75), '1:15');
   assert.equal(P.formatDuration(null), '');
 });
+
+// ---------------------------------------------------------------------------
+// 배포 후 수정: 업로드 오류 문구 · 검은 영상 썸네일
+// ---------------------------------------------------------------------------
+
+test('uploadErrorMessage explains a missing Blob store instead of the library message', () => {
+  const r = P.uploadErrorMessage('Vercel Blob: Failed to retrieve the client token');
+  assert.equal(r.storageMissing, true);
+  assert.match(r.text, /저장소/);
+  assert.equal(P.uploadErrorMessage('Failed to fetch').storageMissing, false);
+  assert.match(P.uploadErrorMessage('Failed to fetch').text, /네트워크/);
+  assert.equal(P.uploadErrorMessage('캡션은(는) 100자 이하로 입력해 주세요.').text, '캡션은(는) 100자 이하로 입력해 주세요.');
+  assert.match(P.uploadErrorMessage('').text, /다시/);
+});
+
+test('isMostlyBlack detects black video frames from RGBA pixels', () => {
+  const black = new Uint8ClampedArray(4 * 16).fill(0);
+  for (let i = 3; i < black.length; i += 4) black[i] = 255;
+  assert.equal(P.isMostlyBlack(black), true);
+  const bright = new Uint8ClampedArray(4 * 16).fill(200);
+  assert.equal(P.isMostlyBlack(bright), false);
+  const dim = new Uint8ClampedArray(4 * 16).fill(12);
+  assert.equal(P.isMostlyBlack(dim), true);
+  assert.equal(P.isMostlyBlack(new Uint8ClampedArray(0)), true);
+});

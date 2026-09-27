@@ -19,9 +19,17 @@ function readBody(req) {
 }
 
 module.exports = async function handler(req, res) {
+  // GET: 업로드할 수 있는 상태인지(Blob 저장소 연결 여부)만 알려줍니다. 토큰 값은 절대 내보내지 않아요.
+  if (req.method === 'GET') {
+    if (process.env.BLOB_READ_WRITE_TOKEN) return res.status(200).json({ ready: true });
+    return res.status(200).json({
+      ready: false,
+      message: 'Vercel 프로젝트에 Blob 저장소가 연결되지 않았어요 (BLOB_READ_WRITE_TOKEN 없음).',
+    });
+  }
   if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: 'POST만 지원합니다.' });
+    res.setHeader('Allow', 'GET, POST');
+    return res.status(405).json({ error: 'GET, POST만 지원합니다.' });
   }
   try {
     const result = await handleUpload({

@@ -206,3 +206,24 @@ test('PATCH /api/photos forbids other travelers and validates input', async () =
   const h3 = loadHandler('photos.js', patchSql(null), { '@vercel/blob': blobMock().module });
   assert.equal((await call(h3, { method: 'PATCH', query: { id: '10' }, body: { travelerId: 1 } })).statusCode, 404);
 });
+
+// ---- 업로드 가능 여부 (배포 후 수정) ----------------------------------------
+
+test('GET /api/photo-upload reports whether the Blob store is connected', async () => {
+  const handlerPath = require.resolve('../api/photo-upload.js');
+  const saved = process.env.BLOB_READ_WRITE_TOKEN;
+  try {
+    delete require.cache[handlerPath];
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    let res = await call(require(handlerPath), { method: 'GET' });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.ready, false);
+    assert.match(res.body.message, /Blob/);
+    process.env.BLOB_READ_WRITE_TOKEN = 'vercel_blob_rw_test';
+    res = await call(require(handlerPath), { method: 'GET' });
+    assert.deepEqual(res.body, { ready: true });
+  } finally {
+    if (saved === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
+    else process.env.BLOB_READ_WRITE_TOKEN = saved;
+  }
+});

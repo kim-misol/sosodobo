@@ -34,6 +34,7 @@
     error: null,
     pending: [],         // 업로드 대기 항목
     uploading: false,
+    storageReady: null,  // 사진 저장소(Blob) 연결 여부: null=모름, true, false
     lightboxId: null,    // 라이트박스에 열린 사진 id
     infoOpen: false,     // 라이트박스 ⓘ 촬영 정보 패널
     editingMeta: false,  // 시간·위치 수정 폼 열림
@@ -137,6 +138,18 @@
       return el.value.trim() !== '';
     });
     return typed;
+  }
+
+  /** 사진 저장소(Blob)가 연결돼 있는지 서버에 물어봅니다 (토큰 값은 받지 않음). */
+  async function checkStorage() {
+    try {
+      var r = await api('/photo-upload');
+      state.storageReady = !!(r && r.ready);
+    } catch (e) {
+      state.storageReady = null; // 확인 실패는 "모름" — 업로드를 막지 않음
+    }
+    render();
+    return state.storageReady;
   }
 
   var sectionVisible = false;
@@ -306,11 +319,19 @@
     }
     var ready = state.pending.filter(function (it) { return it.status === 'ready'; });
     if (!ready.length) return;
+    if (state.storageReady !== true) await checkStorage();
+    if (state.storageReady === false) {
+      ready.forEach(function (it) { it.uploadError = P.STORAGE_MISSING_TEXT; });
+      renderPending();
+      render();
+      return;
+    }
     state.uploading = true;
     renderPending();
     for (var i = 0; i < ready.length; i++) {
       var item = ready[i];
       item.status = 'uploading';
+      item.uploadError = null;
       renderPending();
       try {
         var caption = P.validateCaption(item.caption);
@@ -337,8 +358,19 @@
         state.photos.push(saved);
         removePending(item.key);
       } catch (err) {
-        item.status = 'error';
-        item.error = err.message;
+        // 준비해 둔 파일은 그대로 두고 "다시 올리기"로 재시도할 수 있게 합니다.
+        var msg = P.uploadErrorMessage(err && err.message);
+        item.status = 'ready';
+        item.progress = 0;
+        item.uploadError = msg.text;
+        if (msg.storageMissing) {
+          // 저장소 문제는 나머지도 똑같이 실패하므로 여기서 멈춥니다.
+          state.storageReady = false;
+          ready.slice(i + 1).forEach(function (it) { it.uploadError = msg.text; });
+          renderPending();
+          render();
+          break;
+        }
       }
       renderPending();
       render();
@@ -364,6 +396,20 @@
       target.addEventListener(eventName, ok);
       target.addEventListener('error', fail);
     });
+  }
+
+  /** 영상의 지금 프레임이 거의 검은색인지 (작게 그려서 확인). */
+  function frameIsBlack(video) {
+    try {
+      var c = document.createElement('canvas');
+      c.width = 24;
+      c.height = 24;
+      var ctx = c.getContext('2d');
+      ctx.drawImage(video, 0, 0, 24, 24);
+      return P.isMostlyBlack(ctx.getImageData(0, 0, 24, 24).data);
+    } catch (e) {
+      return false;
+    }
   }
 
   /** 썸네일을 못 뽑는 브라우저(일부 iOS)용 대체 이미지. */
@@ -402,14 +448,21 @@
       item.width = video.videoWidth || null;
       item.height = video.videoHeight || null;
 
-      var thumb;
+      var thumb = null;
       try {
-        video.currentTime = P.videoThumbTime(video.duration);
-        await waitFor(video, 'seeked', 8000);
-        thumb = await canvasToJpeg(video, video.videoWidth, video.videoHeight, P.LIMITS.thumbMaxEdge, P.LIMITS.thumbQuality);
+        // 앞부분 프레임이 검게 나오면(일부 아이폰 영상) 가운데 지점에서 한 번 더 떠 봅니다.
+        var tries = [P.videoThumbTime(video.duration), video.duration / 2];
+        for (var ti = 0; ti < tries.length && !thumb; ti++) {
+          video.currentTime = tries[ti];
+          await waitFor(video, 'seeked', 8000);
+          if (!frameIsBlack(video)) {
+            thumb = await canvasToJpeg(video, video.videoWidth, video.videoHeight, P.LIMITS.thumbMaxEdge, P.LIMITS.thumbQuality);
+          }
+        }
       } catch (e) {
-        thumb = await placeholderThumb();
+        thumb = null;
       }
+      if (!thumb) thumb = await placeholderThumb();
       item.thumb = thumb.blob;
       item.previewUrl = URL.createObjectURL(item.thumb);
     } finally {
@@ -512,6 +565,7 @@
   function render() {
     if (state.loading && !state.photos.length) showStatus('사진을 불러오는 중…', 'loading');
     else if (state.error) showStatus('⚠️ ' + state.error, 'error');
+    else if (state.storageReady === false) showStatus('⚠️ ' + P.STORAGE_MISSING_TEXT, 'error');
     else showStatus(null);
     renderMe();
     renderTabs();
@@ -548,6 +602,7 @@
     }
     els.pending.hidden = false;
     var readyCount = state.pending.filter(function (it) { return it.status === 'ready'; }).length;
+    var retrying = state.pending.some(function (it) { return it.status === 'ready' && it.uploadError; });
     var rows = state.pending.map(function (it) {
       var thumb = it.previewUrl
         ? '<img src="' + esc(it.previewUrl) + '" alt="">'
@@ -565,6 +620,7 @@
           '<input type="text" data-field="caption" data-key="' + it.key + '" maxlength="' + P.LIMITS.captionMax +
           '" placeholder="한 줄 캡션 (선택)" value="' + esc(it.caption) + '"' + disabled + '>' +
           '</div>' +
+          (it.uploadError && it.status !== 'uploading' ? '<div class="ph-err" style="margin-top:6px">⚠️ ' + esc(it.uploadError) + '</div>' : '') +
           (it.status === 'uploading'
             ? '<div class="ph-progress"><span data-progress="' + it.key + '" style="width:' + it.progress + '%"></span></div>'
             : '');
@@ -580,7 +636,7 @@
       rows +
       '<div class="ph-pend-actions">' +
       '<button type="button" class="st-btn" data-action="upload"' + (state.uploading || !readyCount ? ' disabled' : '') + '>' +
-      (state.uploading ? '올리는 중…' : readyCount + '개 올리기') + '</button>' +
+      (state.uploading ? '올리는 중…' : readyCount + '개 ' + (retrying ? '다시 올리기' : '올리기')) + '</button>' +
       '<button type="button" class="st-linkbtn" data-action="clear"' + (state.uploading ? ' disabled' : '') + '>모두 취소</button>' +
       '</div>';
   }
@@ -1171,6 +1227,7 @@
     state.me = readMe();
     bind();
     load();
+    checkStorage();
     startPolling();
   }
 
