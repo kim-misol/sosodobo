@@ -260,6 +260,9 @@
     item.placeName = near ? near.name : null;
     item.locationSource = lat !== null ? 'exif' : null;
     item.day = P.suggestDay(item.takenAt, tripStart());
+    // 올리기 전에 고쳐도 '원래대로' 되돌릴 수 있게 파일에서 읽은 값을 따로 둡니다.
+    var fileTime = picked.source === 'exif' || picked.source === 'file';
+    item.original = { takenAt: fileTime ? picked.takenAt : null, takenAtSource: fileTime ? picked.source : null, lat: lat, lng: lng };
   }
 
   var preparers = { image: prepareImage, video: function (item) { return prepareVideo(item); } };
@@ -369,6 +372,7 @@
           lng: item.lng,
           placeName: item.placeName,
           locationSource: item.locationSource,
+          original: item.original,
           camera: item.camera,
         }));
         state.photos.push(saved);
@@ -604,11 +608,29 @@
     var bits = [];
     if (it.kind === 'video' && it.durationSec) bits.push('🎞 ' + P.formatDuration(it.durationSec));
     if (it.takenAt) {
-      bits.push('📅 ' + esc(formatWhen(it.takenAt)) + (it.takenAtSource === 'exif' ? '' : ' <span class="ph-muted">(추정)</span>'));
+      var timeNote = it.takenAtSource === 'manual' ? '(직접 입력)' : it.takenAtSource === 'exif' ? '' : '(추정)';
+      bits.push('📅 ' + esc(formatWhen(it.takenAt)) + (timeNote ? ' <span class="ph-muted">' + timeNote + '</span>' : ''));
     }
-    if (it.lat !== null && it.lat !== undefined) bits.push('📍 ' + (it.placeName ? esc(it.placeName) : '위치 정보 있음'));
+    if (it.placeName) bits.push('📍 ' + esc(it.placeName));
+    else if (it.lat !== null && it.lat !== undefined) bits.push('📍 위치 정보 있음');
     else bits.push('<span class="ph-muted">📍 위치 정보 없음</span>');
     return bits.join(' · ');
+  }
+
+  /** 올리기 전 시간·장소 고치기 (접었다 펼치기). 시각을 바꾸면 일차도 그 날짜로 맞춰집니다. */
+  function pendingEditHtml(it) {
+    if (!it.editing) {
+      return '<button type="button" class="ph-linkbtn ph-pend-editbtn" data-edit="' + it.key + '">✎ 시간·장소 고치기</button>';
+    }
+    return '<div class="ph-pend-edit">' +
+      '<label><span>촬영 시각 <span class="ph-muted">(한국 시간)</span></span>' +
+      '<input type="datetime-local" data-field="takenAt" data-key="' + it.key + '" value="' + esc(P.toKstInputValue(it.takenAt)) + '"></label>' +
+      '<label><span>장소</span><select data-field="place" data-key="' + it.key + '">' + placeOptionsHtml(it, it.placeCustom ? 'custom' : null) + '</select></label>' +
+      '<input type="text" data-field="placeName" data-key="' + it.key + '" maxlength="' + P.LIMITS.placeNameMax +
+      '" placeholder="장소 이름 (예: 지족해협 죽방렴)"' + (it.placeCustom ? '' : ' hidden') + ' value="' +
+      esc(it.placeCustom && it.locationSource === 'manual' ? it.placeName || '' : '') + '">' +
+      '<button type="button" class="ph-linkbtn" data-edit="' + it.key + '">접기</button>' +
+      '</div>';
   }
 
   function renderPending() {
@@ -637,6 +659,7 @@
           '<input type="text" data-field="caption" data-key="' + it.key + '" maxlength="' + P.LIMITS.captionMax +
           '" placeholder="한 줄 캡션 (선택)" value="' + esc(it.caption) + '"' + disabled + '>' +
           '</div>' +
+          (it.status === 'uploading' ? '' : pendingEditHtml(it)) +
           (it.uploadError && it.status !== 'uploading' ? '<div class="ph-err" style="margin-top:6px">⚠️ ' + esc(it.uploadError) + '</div>' : '') +
           (it.status === 'uploading'
             ? '<div class="ph-progress"><span data-progress="' + it.key + '" style="width:' + it.progress + '%"></span></div>'
@@ -938,8 +961,13 @@
 
   var editedTag = '<span class="ph-tag">✎ 수정됨</span>';
 
+  /** 시간·위치·일차는 "나는 누구"를 고른 여행자 누구나 고칠 수 있어요 (캡션·삭제는 올린 사람만). */
+  function canEditMeta() {
+    return Number.isInteger(state.me);
+  }
+
   function infoPanelHtml(p, mine) {
-    if (mine && state.editingMeta) return editFormHtml(p);
+    if (canEditMeta() && state.editingMeta) return editFormHtml(p, mine);
     var edited = P.isEdited(p);
     var rows = [];
 
@@ -976,7 +1004,7 @@
       rows.push(infoRow('🖼', '크기', p.width + '×' + p.height + ' <span class="ph-muted">(앨범 저장본)</span>'));
     }
 
-    var editBtn = mine && lightboxActions['edit-meta']
+    var editBtn = canEditMeta() && lightboxActions['edit-meta']
       ? '<button type="button" class="ph-act" data-action="edit-meta">✎ 시간·위치 수정</button>' : '';
     return '<div class="ph-info" data-slot="info">' + rows.join('') +
       (editBtn ? '<div class="ph-lb-actions">' + editBtn + '</div>' : '') + '</div>';
@@ -1044,9 +1072,9 @@
   }
 
   // ---------------------------------------------------------------------------
-  // 시간·위치 수정 (본인 사진만)
+  // 시간·위치·일차 수정 (여행자 누구나, 캡션은 올린 사람만)
   // ---------------------------------------------------------------------------
-  function placeOptionsHtml(p) {
+  function placeOptionsHtml(p, selected) {
     var current = p.placeName || (p.lat !== null && p.lat !== undefined ? P.formatCoords(p.lat, p.lng) : '위치 없음');
     var groups = {};
     tripPlaces().forEach(function (pl) {
@@ -1059,17 +1087,18 @@
         return '<option value="preset:' + esc(pl.id) + '">' + esc(pl.name) + '</option>';
       }).join('') + '</optgroup>';
     });
-    html += '<option value="custom">직접 입력…</option>';
+    html += '<option value="custom"' + (selected === 'custom' ? ' selected' : '') + '>직접 입력…</option>';
     html += '<option value="clear">위치 지우기</option>';
     return html;
   }
 
-  function editFormHtml(p) {
+  function editFormHtml(p, mine) {
     var edited = P.isEdited(p);
     var o = p.original || {};
     var canResetTime = edited.time && !!o.takenAt;
     var canResetLoc = edited.location;
     return '<form class="ph-edit" data-slot="edit" autocomplete="off">' +
+      (mine ? '' : '<p class="ph-muted ph-edit-note">' + esc(nameOf(p.uploaderId)) + '님이 올린 사진이에요. 시간·일차·장소를 함께 고칠 수 있어요.</p>') +
       '<label class="ph-edit-label"><span>촬영 시각 <span class="ph-muted">(한국 시간)</span></span>' +
       '<input type="datetime-local" name="takenAt" value="' + esc(P.toKstInputValue(p.takenAt)) + '"></label>' +
       (canResetTime ? '<button type="button" class="ph-linkbtn" data-action="reset-time">↺ 원래 시각으로 (' +
@@ -1080,8 +1109,8 @@
       '" placeholder="장소 이름 (예: 지족해협 죽방렴)" hidden>' +
       (canResetLoc ? '<button type="button" class="ph-linkbtn" data-action="reset-location">↺ 원래 위치로' +
         (o.lat !== null && o.lat !== undefined ? '' : ' (위치 없음)') + '</button>' : '') +
-      '<label class="ph-edit-label">캡션<input type="text" name="caption" maxlength="' + P.LIMITS.captionMax +
-      '" value="' + esc(p.caption || '') + '" placeholder="한 줄 캡션 (선택)"></label>' +
+      (mine ? '<label class="ph-edit-label">캡션<input type="text" name="caption" maxlength="' + P.LIMITS.captionMax +
+      '" value="' + esc(p.caption || '') + '" placeholder="한 줄 캡션 (선택)"></label>' : '') +
       '<div class="ph-lb-actions">' +
       '<button type="submit" class="ph-act on"' + (state.saving ? ' disabled' : '') + '>' + (state.saving ? '저장 중…' : '저장') + '</button>' +
       '<button type="button" class="ph-act" data-action="edit-cancel">취소</button>' +
@@ -1115,9 +1144,11 @@
     if (t === undefined || t === null) { alert('촬영 시각을 올바르게 입력해 주세요.'); return; }
     if (t !== p.takenAt) body.takenAt = t;
     body.day = form.day.value === '' ? null : Number(form.day.value);
-    var caption = P.validateCaption(form.caption.value);
-    if (caption.error) { alert(caption.error); return; }
-    body.caption = caption.value;
+    if (form.caption) { // 캡션 칸은 올린 사람에게만 보여요
+      var caption = P.validateCaption(form.caption.value);
+      if (caption.error) { alert(caption.error); return; }
+      body.caption = caption.value;
+    }
 
     var choiceVal = form.place.value;
     var choice = choiceVal.indexOf('preset:') === 0 ? { type: 'preset', id: choiceVal.slice(7) }
@@ -1208,6 +1239,12 @@
     els.pending.addEventListener('click', function (e) {
       var rm = e.target.closest('[data-remove]');
       if (rm) { removePending(rm.getAttribute('data-remove')); return; }
+      var ed = e.target.closest('[data-edit]');
+      if (ed) {
+        var target = state.pending.find(function (x) { return x.key === ed.getAttribute('data-edit'); });
+        if (target) { target.editing = !target.editing; renderPending(); }
+        return;
+      }
       var act = e.target.closest('[data-action]');
       if (!act) return;
       if (act.getAttribute('data-action') === 'upload') uploadAll();
@@ -1226,11 +1263,36 @@
       if (!it || !field) return;
       if (field === 'caption') it.caption = e.target.value;
       if (field === 'day') it.day = e.target.value === '' ? null : Number(e.target.value);
+      if (field === 'placeName') {
+        var loc = P.locationChoice({ type: 'custom', name: e.target.value }, it, tripPlaces());
+        if (loc) Object.assign(it, loc);
+      }
     });
     els.pending.addEventListener('change', function (e) {
-      if (e.target.getAttribute('data-field') === 'day') {
-        var it = state.pending.find(function (x) { return x.key === e.target.getAttribute('data-key'); });
-        if (it) it.day = e.target.value === '' ? null : Number(e.target.value);
+      var field = e.target.getAttribute('data-field');
+      var it = state.pending.find(function (x) { return x.key === e.target.getAttribute('data-key'); });
+      if (!it) return;
+      if (field === 'day') it.day = e.target.value === '' ? null : Number(e.target.value);
+      if (field === 'takenAt') {
+        var t = P.fromKstInputValue(e.target.value);
+        if (!t) return; // 지우는 중이거나 잘못된 값이면 그대로 둡니다
+        it.takenAt = t;
+        it.takenAtSource = 'manual';
+        var day = P.suggestDay(t, tripStart());
+        if (day !== null) it.day = day;
+        renderPending();
+      }
+      if (field === 'place') {
+        var v = e.target.value;
+        it.placeCustom = v === 'custom';
+        var choice = v.indexOf('preset:') === 0 ? { type: 'preset', id: v.slice(7) } : { type: v };
+        var loc = P.locationChoice(choice, it, tripPlaces());
+        if (loc) Object.assign(it, loc);
+        renderPending();
+        if (it.placeCustom) {
+          var input = els.pending.querySelector('[data-field="placeName"][data-key="' + it.key + '"]');
+          if (input) input.focus();
+        }
       }
     });
 

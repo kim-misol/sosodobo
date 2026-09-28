@@ -2,7 +2,8 @@
 //   GET                                   → 사진 목록 + 여행자 목록
 //   POST   { uploaderId, url, thumbUrl, … } → 업로드가 끝난 파일을 앨범에 등록
 //   PATCH  ?id=10 { travelerId, caption?, day?, takenAt?, lat?, lng?, placeName?, locationSource?, reset? }
-//                                          → 캡션·일차·촬영시각·위치 수정 / reset:['time','location'] 원래대로 (올린 사람만)
+//                                          → 일차·촬영시각·위치 수정 / reset:['time','location'] 원래대로 (여행자 누구나)
+//                                            캡션은 올린 사람만
 //   DELETE ?id=10&travelerId=1             → 삭제 (올린 사람만) + Blob 파일 정리
 //
 // 파일 자체는 브라우저가 Vercel Blob 에 직접 올리고(/api/photo-upload 가 토큰 발급),
@@ -60,8 +61,11 @@ async function createPhoto(v) {
   return mapPhotoRow(result.rows[0]);
 }
 
-/** 사진 한 장을 찾아 요청자에게 권한이 있는지 확인. 문제가 있으면 { status, error }. */
-async function findOwnedPhoto(req, travelerIdRaw) {
+/**
+ * 사진 한 장을 찾아 요청자에게 권한이 있는지 확인. 문제가 있으면 { status, error }.
+ * ownerOnly=false 면 등록된 여행자 누구나 통과하고, isOwner 로 본인 여부를 알려 줍니다.
+ */
+async function findOwnedPhoto(req, travelerIdRaw, ownerOnly = true) {
   const id = toInt(req.query.id);
   const travelerId = toInt(travelerIdRaw !== undefined ? travelerIdRaw : req.query.travelerId);
   if (!Number.isInteger(id) || !Number.isInteger(travelerId)) {
@@ -70,10 +74,12 @@ async function findOwnedPhoto(req, travelerIdRaw) {
   const result = await sql`SELECT * FROM photos WHERE id = ${id}`;
   if (result.rowCount === 0) return { status: 404, error: '해당 사진을 찾을 수 없어요.' };
   const row = result.rows[0];
-  if (!PhotoCore.canModify({ uploaderId: row.uploader_id }, travelerId)) {
-    return { status: 403, error: '본인이 올린 사진만 바꿀 수 있어요.' };
+  const isOwner = PhotoCore.canModify({ uploaderId: row.uploader_id }, travelerId);
+  if (!isOwner) {
+    if (ownerOnly) return { status: 403, error: '본인이 올린 사진만 바꿀 수 있어요.' };
+    if (!(await travelerExists(travelerId))) return { status: 403, error: '등록된 여행자만 고칠 수 있어요.' };
   }
-  return { row, travelerId };
+  return { row, travelerId, isOwner };
 }
 
 module.exports = async function handler(req, res) {
@@ -102,10 +108,10 @@ module.exports = async function handler(req, res) {
 
     if (req.method === 'PATCH') {
       const body = readBody(req);
-      const found = await findOwnedPhoto(req, body.travelerId);
+      const found = await findOwnedPhoto(req, body.travelerId, false);
       if (found.error) return res.status(found.status).json({ error: found.error });
-      const parsed = parsePhotoPatch(body, mapPhotoRow(found.row));
-      if (parsed.error) return res.status(400).json({ error: parsed.error });
+      const parsed = parsePhotoPatch(body, mapPhotoRow(found.row), undefined, { isOwner: found.isOwner });
+      if (parsed.error) return res.status(parsed.status || 400).json({ error: parsed.error });
       const v = parsed.value;
       const result = await sql`
         UPDATE photos SET

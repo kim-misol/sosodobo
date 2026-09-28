@@ -91,6 +91,25 @@ function dayFromTakenAt(takenAt, tripStartDate) {
   return PhotoCore.suggestDay(takenAt, start, LIMITS.tripDays);
 }
 
+/** POST 본문의 original(파일에서 읽은 시각·위치). 없으면 전부 null. */
+function parseOriginal(raw) {
+  const empty = { takenAt: null, takenAtSource: null, lat: null, lng: null };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { value: empty };
+  const takenAt = toIsoOrNull(raw.takenAt);
+  if (takenAt === undefined) return { error: '원래 촬영 시각이 올바르지 않아요.' };
+  const source = ['exif', 'file'].includes(raw.takenAtSource) ? raw.takenAtSource : null;
+  const loc = parseLatLng(raw.lat, raw.lng);
+  if (loc.error) return { error: loc.error };
+  return {
+    value: {
+      takenAt: takenAt && source ? takenAt : null,
+      takenAtSource: takenAt && source ? source : null,
+      lat: loc.lat,
+      lng: loc.lng,
+    },
+  };
+}
+
 /**
  * POST /api/photos 본문 검증. { value } 또는 { error }.
  * 일차를 고르지 않았으면 촬영 날짜로 정합니다.
@@ -146,8 +165,12 @@ function parsePhoto(body, opts) {
   }
 
   // 파일에서 읽은 값만 "원본"으로 남겨 나중에 '원래대로' 되돌릴 수 있게 합니다.
+  // 올리기 전에 시간·장소를 고쳤으면 브라우저가 파일에서 읽은 값을 original 로 함께 보냅니다.
   const fromFile = takenAtSource && takenAtSource !== 'manual';
   const locFromFile = locationSource === 'exif';
+  const orig = parseOriginal(b.original);
+  if (orig.error) return { error: orig.error };
+  const o = orig.value;
 
   return {
     value: {
@@ -166,10 +189,10 @@ function parsePhoto(body, opts) {
       lng: loc.lng,
       placeName: place.value,
       locationSource,
-      originalTakenAt: fromFile ? takenAt : null,
-      originalTakenAtSource: fromFile ? takenAtSource : null,
-      originalLat: locFromFile ? loc.lat : null,
-      originalLng: locFromFile ? loc.lng : null,
+      originalTakenAt: fromFile ? takenAt : o.takenAt,
+      originalTakenAtSource: fromFile ? takenAtSource : o.takenAtSource,
+      originalLat: locFromFile ? loc.lat : o.lat,
+      originalLng: locFromFile ? loc.lng : o.lng,
       camera: sanitizeCamera(b.camera),
     },
   };
@@ -190,6 +213,8 @@ function has(obj, key) {
  */
 function parsePhotoPatch(body, current, nowMs, opts) {
   const tripStartDate = opts && opts.tripStartDate;
+  // 시간·위치·일차는 여행자 누구나 고칠 수 있고, 캡션은 올린 사람만 (opts.isOwner === false 면 막음).
+  const isOwner = !opts || opts.isOwner !== false;
   const b = body || {};
   const cur = current || {};
   const original = cur.original || {};
@@ -211,6 +236,7 @@ function parsePhotoPatch(body, current, nowMs, opts) {
   };
 
   if (has(b, 'caption')) {
+    if (!isOwner) return { error: '캡션은 올린 사람만 바꿀 수 있어요.', status: 403 };
     const caption = PhotoCore.validateCaption(b.caption);
     if (caption.error) return { error: caption.error };
     next.caption = caption.value;

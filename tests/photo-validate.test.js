@@ -208,3 +208,29 @@ test('parsePhotoPatch: 원래 시각으로 되돌리면 원래 날짜의 일차�
   });
   assert.equal(parsePhotoPatch({ travelerId: 1, reset: ['time'] }, cur, NOW, TRIP).value.day, 2);
 });
+
+test('parsePhoto: 올리기 전에 고친 사진도 파일에서 읽은 원래 값을 남긴다', () => {
+  const r = parsePhoto(base({
+    takenAt: '2026-09-25T10:00:00+09:00', takenAtSource: 'manual',
+    placeName: '창선교', locationSource: 'manual', lat: 34.85, lng: 128.02,
+    original: { takenAt: '2026-09-24T10:00:00+09:00', takenAtSource: 'exif', lat: 34.85, lng: 128.02 },
+  }), TRIP);
+  assert.equal(r.value.takenAtSource, 'manual');
+  assert.equal(r.value.originalTakenAt, '2026-09-24T01:00:00.000Z');
+  assert.equal(r.value.originalTakenAtSource, 'exif');
+  assert.equal(r.value.originalLat, 34.85);
+  // 파일 시각이 아닌 값(upload·manual)은 원본으로 남기지 않음
+  const r2 = parsePhoto(base({ takenAt: '2026-09-25T10:00:00+09:00', takenAtSource: 'manual',
+    original: { takenAt: '2026-09-28T10:00:00+09:00', takenAtSource: 'upload' } }), TRIP);
+  assert.equal(r2.value.originalTakenAt, null);
+  assert.ok(parsePhoto(base({ original: { takenAt: 'nope', takenAtSource: 'exif' } })).error);
+});
+
+test('parsePhotoPatch: 올린 사람이 아니면 캡션은 못 고치고 나머지는 고칠 수 있다', () => {
+  const r = parsePhotoPatch({ travelerId: 2, caption: 'x' }, current, NOW, { isOwner: false });
+  assert.equal(r.status, 403);
+  const ok = parsePhotoPatch({ travelerId: 2, day: 2, placeName: '적량마을', locationSource: 'manual' }, current, NOW, { isOwner: false });
+  assert.equal(ok.error, undefined);
+  assert.equal(ok.value.day, 2);
+  assert.equal(ok.value.caption, '노을');
+});

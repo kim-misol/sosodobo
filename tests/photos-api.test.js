@@ -198,9 +198,39 @@ test('PATCH /api/photos lets the uploader edit time and place', async () => {
   assert.equal(res.body.caption, '수정됨');
 });
 
-test('PATCH /api/photos forbids other travelers and validates input', async () => {
-  const h1 = loadHandler('photos.js', patchSql(photoRow()), { '@vercel/blob': blobMock().module });
-  assert.equal((await call(h1, { method: 'PATCH', query: { id: '10' }, body: { travelerId: 2, caption: 'x' } })).statusCode, 403);
+function patchSqlWithTravelers(row, travelerIds) {
+  return createFakeSql((text, values) => {
+    if (text.startsWith('SELECT 1 FROM travelers')) return { rows: travelerIds.includes(values[0]) ? [{ '?column?': 1 }] : [] };
+    if (text.startsWith('SELECT') && text.includes('FROM photos')) return { rows: row ? [row] : [] };
+    if (text.startsWith('UPDATE photos')) return { rows: [Object.assign({}, row, { taken_at_source: 'manual' })] };
+    return { rows: [] };
+  });
+}
+
+test('PATCH /api/photos: 다른 여행자도 시간·위치·일차를 고칠 수 있다', async () => {
+  const sql = patchSqlWithTravelers(photoRow(), [1, 2]);
+  const handler = loadHandler('photos.js', sql, { '@vercel/blob': blobMock().module });
+  const res = await call(handler, {
+    method: 'PATCH', query: { id: '10' },
+    body: { travelerId: 2, takenAt: '2026-09-25T06:00:00Z', day: 2, placeName: '창선교', locationSource: 'manual' },
+  });
+  assert.equal(res.statusCode, 200);
+  const update = sql.calls.find((c) => c.text.startsWith('UPDATE photos'));
+  assert.ok(update.values.includes('2026-09-25T06:00:00.000Z'));
+  assert.ok(update.values.includes('창선교'));
+});
+
+test('PATCH /api/photos: 캡션은 올린 사람만, 등록되지 않은 여행자는 못 고친다', async () => {
+  const h1 = loadHandler('photos.js', patchSqlWithTravelers(photoRow(), [1, 2]), { '@vercel/blob': blobMock().module });
+  const r1 = await call(h1, { method: 'PATCH', query: { id: '10' }, body: { travelerId: 2, caption: 'x' } });
+  assert.equal(r1.statusCode, 403);
+  assert.match(r1.body.error, /캡션/);
+  const h2 = loadHandler('photos.js', patchSqlWithTravelers(photoRow(), [1]), { '@vercel/blob': blobMock().module });
+  const r2 = await call(h2, { method: 'PATCH', query: { id: '10' }, body: { travelerId: 99, day: 2 } });
+  assert.equal(r2.statusCode, 403);
+});
+
+test('PATCH /api/photos validates input', async () => {
   const h2 = loadHandler('photos.js', patchSql(photoRow()), { '@vercel/blob': blobMock().module });
   assert.equal((await call(h2, { method: 'PATCH', query: { id: '10' }, body: { travelerId: 1, takenAt: 'nope' } })).statusCode, 400);
   const h3 = loadHandler('photos.js', patchSql(null), { '@vercel/blob': blobMock().module });
