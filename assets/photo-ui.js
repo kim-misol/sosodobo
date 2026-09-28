@@ -91,6 +91,17 @@
     return (window.TripPlaces && window.TripPlaces.PLACES) || [];
   }
 
+  /** 1일차 날짜 'YYYY-MM-DD' (assets/places.js). 사진 날짜 ↔ n일차 연결에 씁니다. */
+  function tripStart() {
+    return (window.TripPlaces && window.TripPlaces.TRIP_START_DATE) || null;
+  }
+
+  /** '1일차' → '1일차 · 9/24' (첫날을 알 때만). */
+  function dayLabelWithDate(day) {
+    var date = P.formatDayDate(day, tripStart());
+    return day + '일차' + (date ? ' · ' + date : '');
+  }
+
   function visiblePhotos() {
     return P.filterByDay(P.sortByTakenAt(state.photos), state.filter);
   }
@@ -248,7 +259,7 @@
     var near = P.nearestPlace(lat, lng, tripPlaces());
     item.placeName = near ? near.name : null;
     item.locationSource = lat !== null ? 'exif' : null;
-    item.day = P.suggestDay(item.takenAt, window.TripPlaces && window.TripPlaces.TRIP_START_DATE);
+    item.day = P.suggestDay(item.takenAt, tripStart());
   }
 
   var preparers = { image: prepareImage, video: function (item) { return prepareVideo(item); } };
@@ -534,8 +545,9 @@
       var count = P.filterByDay(state.photos, f.key).length;
       if (f.key === 'etc' && count === 0) return '';
       var active = String(state.filter) === String(f.key);
+      var label = typeof f.key === 'number' ? dayLabelWithDate(f.key) : f.label;
       return '<button type="button" class="ph-tab' + (active ? ' active' : '') + '" data-filter="' + f.key + '" aria-pressed="' + active + '">' +
-        f.label + ' <span class="n">' + count + '</span></button>';
+        esc(label) + ' <span class="n">' + count + '</span></button>';
     }).join('');
   }
 
@@ -581,10 +593,10 @@
   // 렌더링: 업로드 대기 목록
   // ---------------------------------------------------------------------------
   function dayOptions(selected) {
-    var opts = [{ v: '', label: '일차 없음' }, { v: 1, label: '1일차' }, { v: 2, label: '2일차' }, { v: 3, label: '3일차' }];
+    var opts = [{ v: '', label: '일차 없음' }, { v: 1, label: dayLabelWithDate(1) }, { v: 2, label: dayLabelWithDate(2) }, { v: 3, label: dayLabelWithDate(3) }];
     return opts.map(function (o) {
       var sel = String(o.v) === String(selected === null || selected === undefined ? '' : selected) ? ' selected' : '';
-      return '<option value="' + o.v + '"' + sel + '>' + o.label + '</option>';
+      return '<option value="' + o.v + '"' + sel + '>' + esc(o.label) + '</option>';
     }).join('');
   }
 
@@ -1005,6 +1017,12 @@
       if (f.matches('.ph-edit')) { e.preventDefault(); submitEdit(f); }
       else if (f.matches('.ph-cmt-form')) { e.preventDefault(); addComment(f); }
       else if (f.matches('.ph-cmt-edit-form')) { e.preventDefault(); saveCommentEdit(f); }
+    });
+    // 촬영 시각을 바꾸면 그 날짜의 일차로 바로 맞춰 줍니다 (여행 기간 밖이면 그대로, 직접 바꿔도 돼요).
+    els.lightbox.addEventListener('input', function (e) {
+      if (e.target.name !== 'takenAt' || !e.target.closest('.ph-edit')) return;
+      var day = P.suggestDay(P.fromKstInputValue(e.target.value), tripStart());
+      if (day !== null) e.target.form.day.value = String(day);
     });
     els.lightbox.addEventListener('change', function (e) {
       if (e.target.name === 'place' && e.target.closest('.ph-edit')) {

@@ -101,6 +101,20 @@
     return day >= 1 && day <= days ? day : null;
   }
 
+  /** n일차 → 그날 날짜 'YYYY-MM-DD'. 첫날을 모르거나 n 이 올바르지 않으면 null. */
+  function dayDate(day, tripStartDate) {
+    var n = Number(day);
+    var start = tripStartDate ? Date.parse(tripStartDate + 'T00:00:00Z') : NaN;
+    if (!Number.isInteger(n) || n < 1 || !Number.isFinite(start)) return null;
+    return new Date(start + (n - 1) * DAY_MS).toISOString().slice(0, 10);
+  }
+
+  /** n일차 → '9/24' 같은 짧은 날짜. 모르면 ''. */
+  function formatDayDate(day, tripStartDate) {
+    var d = dayDate(day, tripStartDate);
+    return d ? Number(d.slice(5, 7)) + '/' + Number(d.slice(8, 10)) : '';
+  }
+
   // ---------------------------------------------------------------------------
   // 목록
   // ---------------------------------------------------------------------------
@@ -582,6 +596,8 @@
     classifyFile: classifyFile,
     pickTakenAt: pickTakenAt,
     suggestDay: suggestDay,
+    dayDate: dayDate,
+    formatDayDate: formatDayDate,
     kstDateString: kstDateString,
     sortByTakenAt: sortByTakenAt,
     filterByDay: filterByDay,

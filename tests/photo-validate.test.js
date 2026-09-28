@@ -167,3 +167,44 @@ test('presignedUploadOptions: 서명을 그 경로의 put 하나로 좁히고 �
   assert.throws(() => presignedUploadOptions('../etc/passwd'), /허용되지 않은/);
   assert.throws(() => presignedUploadOptions('other/x.jpg'), /허용되지 않은/);
 });
+
+// ---------------------------------------------------------------------------
+// 사진 날짜 ↔ n일차 연결
+// ---------------------------------------------------------------------------
+const TRIP = { tripStartDate: '2026-09-24' };
+
+test('parsePhoto: 일차를 고르지 않으면 촬영 날짜(한국 시간)로 정한다', () => {
+  assert.equal(parsePhoto(base({ takenAt: '2026-09-25T09:00:00+09:00' }), TRIP).value.day, 2);
+  assert.equal(parsePhoto(base({ takenAt: '2026-09-24T23:50:00+09:00' }), TRIP).value.day, 1);
+  // 직접 고른 일차가 우선
+  assert.equal(parsePhoto(base({ takenAt: '2026-09-25T09:00:00+09:00', day: 3 }), TRIP).value.day, 3);
+  // 여행 기간 밖·시각 없음·첫날 모름 → 일차 없음
+  assert.equal(parsePhoto(base({ takenAt: '2026-09-20T09:00:00+09:00' }), TRIP).value.day, null);
+  assert.equal(parsePhoto(base(), TRIP).value.day, null);
+  assert.equal(parsePhoto(base({ takenAt: '2026-09-25T09:00:00+09:00' }), { tripStartDate: null }).value.day, null);
+});
+
+test('parsePhotoPatch: 촬영 시각을 바꾸면 그 날짜의 일차로 옮긴다', () => {
+  const cur = Object.assign({}, current, {
+    day: 1, takenAt: '2026-09-24T03:00:00.000Z',
+    original: Object.assign({}, current.original, { takenAt: '2026-09-24T03:00:00.000Z' }),
+  });
+  const moved = parsePhotoPatch({ travelerId: 1, takenAt: '2026-09-26T10:00:00+09:00' }, cur, NOW, TRIP);
+  assert.equal(moved.value.day, 3);
+  // 일차를 함께 보내면 그 값을 따른다
+  const explicit = parsePhotoPatch({ travelerId: 1, takenAt: '2026-09-26T10:00:00+09:00', day: 2 }, cur, NOW, TRIP);
+  assert.equal(explicit.value.day, 2);
+  // 여행 기간 밖으로 옮기면 일차는 그대로
+  const outside = parsePhotoPatch({ travelerId: 1, takenAt: '2026-09-28T10:00:00+09:00' }, cur, NOW, TRIP);
+  assert.equal(outside.value.day, 1);
+  // 시각을 안 바꾸면 일차도 그대로
+  assert.equal(parsePhotoPatch({ travelerId: 1, caption: 'x' }, Object.assign({}, cur, { day: null }), NOW, TRIP).value.day, null);
+});
+
+test('parsePhotoPatch: 원래 시각으로 되돌리면 원래 날짜의 일차로 돌아간다', () => {
+  const cur = Object.assign({}, current, {
+    day: 3, takenAt: '2026-09-26T01:00:00.000Z', takenAtSource: 'manual',
+    original: Object.assign({}, current.original, { takenAt: '2026-09-25T01:00:00.000Z', takenAtSource: 'exif' }),
+  });
+  assert.equal(parsePhotoPatch({ travelerId: 1, reset: ['time'] }, cur, NOW, TRIP).value.day, 2);
+});

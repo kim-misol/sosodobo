@@ -3,6 +3,8 @@
 //
 // Vercel Postgres(Neon) 연동 시 POSTGRES_URL 등의 환경변수가 자동으로 주입됩니다.
 const { sql } = require('@vercel/postgres');
+const TripPlaces = require('../assets/places.js');
+const { LIMITS } = require('../assets/photo-core.js');
 
 let schemaReady = null;
 
@@ -98,6 +100,7 @@ async function ensureSchema() {
         }
         await sql`INSERT INTO app_meta (key, value) VALUES ('notes_seeded', 'true')`;
       }
+      await backfillPhotoDays();
     })().catch((err) => {
       // 실패하면 다음 요청에서 다시 시도할 수 있게 캐시를 비웁니다.
       schemaReady = null;
@@ -105,6 +108,22 @@ async function ensureSchema() {
     });
   }
   return schemaReady;
+}
+
+// 여행 첫날(TRIP_START_DATE)을 정하기 전에 올라와 일차가 비어 있는 사진을, 촬영 날짜(한국 시간)로
+// 한 번만 채웁니다. 이후 사용자가 '기타'로 바꾼 사진은 건드리지 않도록 첫날 날짜별 플래그로 제어해요.
+async function backfillPhotoDays() {
+  const start = TripPlaces.TRIP_START_DATE;
+  if (!start) return;
+  const key = `photo_days_filled:${start}`;
+  const done = await sql`SELECT 1 FROM app_meta WHERE key = ${key}`;
+  if (done.rowCount > 0) return;
+  await sql`
+    UPDATE photos
+    SET day = ((taken_at AT TIME ZONE 'Asia/Seoul')::date - ${start}::date) + 1
+    WHERE day IS NULL AND taken_at IS NOT NULL
+      AND ((taken_at AT TIME ZONE 'Asia/Seoul')::date - ${start}::date) BETWEEN 0 AND ${LIMITS.tripDays - 1}`;
+  await sql`INSERT INTO app_meta (key, value) VALUES (${key}, 'true') ON CONFLICT (key) DO NOTHING`;
 }
 
 // 공통 응답 헬퍼: JSON + 간단한 에러 처리.

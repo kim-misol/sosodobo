@@ -1,6 +1,7 @@
 // 사진·영상 API 입력 검증 (순수 함수). 파일명이 _ 로 시작해 API 경로로 노출되지 않습니다.
 // 제한값(LIMITS)은 브라우저와 같은 assets/photo-core.js 를 그대로 씁니다.
 const PhotoCore = require('../assets/photo-core.js');
+const TripPlaces = require('../assets/places.js');
 
 const { LIMITS } = PhotoCore;
 
@@ -84,9 +85,19 @@ function sanitizeCamera(raw) {
   return Object.keys(out).length ? out : null;
 }
 
-/** POST /api/photos 본문 검증. { value } 또는 { error }. */
-function parsePhoto(body) {
+/** 촬영 시각 → n일차 (여행 첫날 기준, 한국 시간). 모르면 null. */
+function dayFromTakenAt(takenAt, tripStartDate) {
+  const start = tripStartDate === undefined ? TripPlaces.TRIP_START_DATE : tripStartDate;
+  return PhotoCore.suggestDay(takenAt, start, LIMITS.tripDays);
+}
+
+/**
+ * POST /api/photos 본문 검증. { value } 또는 { error }.
+ * 일차를 고르지 않았으면 촬영 날짜로 정합니다.
+ */
+function parsePhoto(body, opts) {
   const b = body || {};
+  const tripStartDate = opts && opts.tripStartDate;
 
   const uploaderId = toInt(b.uploaderId);
   if (!Number.isInteger(uploaderId)) return { error: '올린 사람을 선택해 주세요.' };
@@ -148,7 +159,7 @@ function parsePhoto(body) {
       height,
       durationSec,
       caption: caption.value,
-      day: day.value,
+      day: day.value !== null ? day.value : dayFromTakenAt(takenAt, tripStartDate),
       takenAt,
       takenAtSource,
       lat: loc.lat,
@@ -175,8 +186,10 @@ function has(obj, key) {
  * PATCH /api/photos 본문 → 수정 후의 전체 값(캡션·일차·시간·위치).
  * current 는 mapPhotoRow() 결과. 본문에 없는 항목은 지금 값을 그대로 둡니다.
  * reset: ['time'] / ['location'] 이면 파일에서 읽은 원본 값으로 되돌립니다.
+ * 촬영 시각이 바뀌었는데 일차를 따로 보내지 않았으면, 새 날짜의 일차로 옮깁니다(여행 기간 밖이면 그대로).
  */
-function parsePhotoPatch(body, current, nowMs) {
+function parsePhotoPatch(body, current, nowMs, opts) {
+  const tripStartDate = opts && opts.tripStartDate;
   const b = body || {};
   const cur = current || {};
   const original = cur.original || {};
@@ -218,6 +231,11 @@ function parsePhotoPatch(body, current, nowMs) {
     if (Date.parse(t) > now + FUTURE_TOLERANCE_MS) return { error: '촬영 시각이 미래일 수는 없어요.' };
     next.takenAt = t;
     next.takenAtSource = 'manual';
+  }
+
+  if (!has(b, 'day') && next.takenAt !== (cur.takenAt || null)) {
+    const moved = dayFromTakenAt(next.takenAt, tripStartDate);
+    if (moved !== null) next.day = moved;
   }
 
   if (reset.includes('location')) {
@@ -343,6 +361,7 @@ module.exports = {
   parseLatLng,
   parsePlaceName,
   parseDay,
+  dayFromTakenAt,
   sanitizeCamera,
   toInt,
   toIsoOrNull,

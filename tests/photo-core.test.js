@@ -475,3 +475,23 @@ test('isMostlyBlack detects black video frames from RGBA pixels', () => {
   assert.equal(P.isMostlyBlack(dim), true);
   assert.equal(P.isMostlyBlack(new Uint8ClampedArray(0)), true);
 });
+
+test('dayDate / formatDayDate: n일차를 그날 날짜로 바꾼다', () => {
+  assert.equal(P.dayDate(1, '2026-09-24'), '2026-09-24');
+  assert.equal(P.dayDate(3, '2026-09-24'), '2026-09-26');
+  assert.equal(P.dayDate(2, '2026-12-31'), '2027-01-01');
+  assert.equal(P.dayDate(1, null), null);
+  assert.equal(P.dayDate(0, '2026-09-24'), null);
+  assert.equal(P.formatDayDate(2, '2026-09-24'), '9/25');
+  assert.equal(P.formatDayDate(1, null), '');
+});
+
+test('여행 첫날(places.js)이 정해져 있어 촬영 날짜가 일차로 연결된다', () => {
+  const TripPlaces = require('../assets/places.js');
+  assert.match(TripPlaces.TRIP_START_DATE, /^\d{4}-\d{2}-\d{2}$/);
+  // 9/24 23:30 KST → 1일차, 9/25 00:10 KST → 2일차 (UTC 가 아니라 한국 날짜 기준)
+  assert.equal(P.suggestDay('2026-09-24T14:30:00Z', TripPlaces.TRIP_START_DATE), 1);
+  assert.equal(P.suggestDay('2026-09-24T15:10:00Z', TripPlaces.TRIP_START_DATE), 2);
+  assert.equal(P.suggestDay('2026-09-26T03:00:00Z', TripPlaces.TRIP_START_DATE), 3);
+  assert.equal(P.suggestDay('2026-09-27T03:00:00Z', TripPlaces.TRIP_START_DATE), null);
+});

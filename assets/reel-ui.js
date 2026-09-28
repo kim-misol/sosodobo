@@ -83,7 +83,10 @@
       '<p class="rl-intro">앨범의 사진·영상을 찍은 시간 순서대로 이어서 보여줘요.</p>' +
       '<form class="rl-form" autocomplete="off">' +
       '<div class="rl-grid">' +
-      '<label>범위' + selectHtml('day', opts.day, [['all', '전체'], [1, '1일차'], [2, '2일차'], [3, '3일차']]) + '</label>' +
+      '<label>범위' + selectHtml('day', opts.day, [['all', '전체']].concat([1, 2, 3].map(function (d) {
+        var date = window.PhotoCore.formatDayDate(d, places().TRIP_START_DATE);
+        return [d, d + '일차' + (date ? ' · ' + date : '')];
+      }))) + '</label>' +
       '<label>좋아요' + selectHtml('minLikes', opts.minLikes, [[0, '모두'], [1, '♥ 1개 이상'], [2, '♥ 2개 이상'], [3, '♥ 3개 이상']]) + '</label>' +
       '<label>사진 1장' + selectHtml('photoSec', opts.photoSec, [[2, '2초'], [3, '3초'], [4, '4초']]) + '</label>' +
       '<label>영상 클립' + selectHtml('clipMaxSec', opts.clipMaxSec, [[3, '앞 3초'], [5, '앞 5초'], [10, '앞 10초']]) + '</label>' +
