@@ -154,3 +154,16 @@ test('parsePhoto remembers where the original time came from', () => {
   const r = parsePhoto(base({ takenAt: '2026-09-27T11:06:00Z', takenAtSource: 'file' }));
   assert.equal(r.value.originalTakenAtSource, 'file');
 });
+
+test('presignedUploadOptions: 서명을 그 경로의 put 하나로 좁히고 경로를 바꾸지 않는다', () => {
+  const { presignedUploadOptions } = require('../api/_photo-validate.js');
+  const now = Date.UTC(2026, 8, 28);
+  const { signed, urlOptions } = presignedUploadOptions('photos/1-abc.jpg', now);
+  assert.equal(signed.pathname, 'photos/1-abc.jpg');
+  assert.deepEqual(signed.operations, ['put']);
+  assert.equal(signed.validUntil, now + 60 * 60 * 1000);
+  assert.ok(signed.allowedContentTypes.includes('image/jpeg'));
+  assert.equal(urlOptions.addRandomSuffix, false);
+  assert.throws(() => presignedUploadOptions('../etc/passwd'), /허용되지 않은/);
+  assert.throws(() => presignedUploadOptions('other/x.jpg'), /허용되지 않은/);
+});

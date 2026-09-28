@@ -35,6 +35,7 @@
     pending: [],         // 업로드 대기 항목
     uploading: false,
     storageReady: null,  // 사진 저장소(Blob) 연결 여부: null=모름, true, false
+    storageMode: null,   // 'token' | 'oidc' — 서버가 알려준 업로드 방식
     lightboxId: null,    // 라이트박스에 열린 사진 id
     infoOpen: false,     // 라이트박스 ⓘ 촬영 정보 패널
     editingMeta: false,  // 시간·위치 수정 폼 열림
@@ -145,6 +146,7 @@
     try {
       var r = await api('/photo-upload');
       state.storageReady = !!(r && r.ready);
+      state.storageMode = (r && r.mode) || null;
       state.storageMessage = (r && r.message) || null;
     } catch (e) {
       state.storageReady = null; // 확인 실패는 "모름" — 업로드를 막지 않음
@@ -286,7 +288,9 @@
   // 업로드: Blob 직접 업로드 → /api/photos 등록
   // ---------------------------------------------------------------------------
   function uploadBlob(path, blob, contentType, onProgress) {
-    return window.VercelBlobClient.upload(path, blob, {
+    // 저장소가 토큰 없이(OIDC) 연결돼 있으면 서버가 서명해 준 주소로 올립니다.
+    var send = state.storageMode === 'oidc' ? window.VercelBlobClient.uploadPresigned : window.VercelBlobClient.upload;
+    return send(path, blob, {
       access: 'public',
       handleUploadUrl: API + '/photo-upload',
       contentType: contentType,

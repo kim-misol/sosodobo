@@ -259,15 +259,34 @@ const UPLOAD_CONTENT_TYPES = [
  * 브라우저 직접 업로드용 토큰 규칙. photos/ 폴더 안, 이미지·영상, 용량 제한만 허용합니다.
  * (이미지는 브라우저에서 JPEG 로 줄여 올리므로 HEIC 원본은 올라오지 않습니다.)
  */
-function uploadTokenOptions(pathname) {
+function assertUploadPath(pathname) {
   const p = String(pathname || '');
   if (!/^photos\/[A-Za-z0-9._\-/]+$/.test(p) || p.includes('..')) {
     throw new Error('허용되지 않은 업로드 경로입니다.');
   }
+  return p;
+}
+
+function uploadTokenOptions(pathname) {
+  assertUploadPath(pathname);
   return {
     allowedContentTypes: UPLOAD_CONTENT_TYPES,
     maximumSizeInBytes: LIMITS.videoMaxBytes,
     addRandomSuffix: true,
+  };
+}
+
+/**
+ * OIDC(presigned) 업로드용 서명 범위. 서명을 이 경로 하나·put 하나로 좁히므로 경로를 바꾸는
+ * 무작위 접미사는 붙이지 않습니다 (경로에 이미 시각 + 무작위 문자열이 들어 있어요).
+ */
+function presignedUploadOptions(pathname, nowMs) {
+  const p = assertUploadPath(pathname);
+  const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+  const limits = { allowedContentTypes: UPLOAD_CONTENT_TYPES, maximumSizeInBytes: LIMITS.videoMaxBytes };
+  return {
+    signed: { pathname: p, operations: ['put'], validUntil: now + 60 * 60 * 1000, ...limits },
+    urlOptions: { ...limits, addRandomSuffix: false },
   };
 }
 
@@ -328,6 +347,7 @@ module.exports = {
   toInt,
   toIsoOrNull,
   uploadTokenOptions,
+  presignedUploadOptions,
   mapPhotoRow,
   TAKEN_AT_SOURCES,
   LOCATION_SOURCES,

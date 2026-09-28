@@ -547,7 +547,7 @@
   /** 업로드 실패 이유를 사람이 알아볼 수 있는 문구로. storageMissing 이면 다른 항목도 같은 이유로 실패합니다. */
   function uploadErrorMessage(message) {
     var m = String(message || '');
-    if (/client token|BLOB_READ_WRITE_TOKEN|저장소가 아직 연결/i.test(m)) {
+    if (/client token|presigned URL|BLOB_READ_WRITE_TOKEN|저장소가 아직 연결/i.test(m)) {
       return { storageMissing: true, text: STORAGE_MISSING_TEXT };
     }
     if (/failed to fetch|network|load failed/i.test(m)) {

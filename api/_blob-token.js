@@ -21,4 +21,15 @@ function blobEnvReport(env) {
   return { names, hasToken: !!findBlobToken(e), hasStoreId: !!e.BLOB_STORE_ID };
 }
 
-module.exports = { findBlobToken, blobEnvReport };
+/**
+ * 업로드 방식. 'token' = 읽기·쓰기 토큰(handleUpload), 'oidc' = 토큰 없이 저장소 ID + OIDC(handleUploadPresigned).
+ * 요즘 Vercel 은 저장소를 연결하면 토큰 대신 BLOB_STORE_ID 만 넣어 주고, OIDC 토큰은 요청마다 헤더로 들어옵니다.
+ */
+function blobUploadMode(env) {
+  const e = env || {};
+  if (findBlobToken(e)) return 'token';
+  if (typeof e.BLOB_STORE_ID === 'string' && e.BLOB_STORE_ID.trim()) return 'oidc';
+  return null;
+}
+
+module.exports = { findBlobToken, blobEnvReport, blobUploadMode };

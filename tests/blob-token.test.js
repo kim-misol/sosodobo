@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { findBlobToken, blobEnvReport } = require('../api/_blob-token.js');
+const { findBlobToken, blobEnvReport, blobUploadMode } = require('../api/_blob-token.js');
 
 test('findBlobToken prefers BLOB_READ_WRITE_TOKEN', () => {
   assert.equal(findBlobToken({ BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_a_b' }), 'vercel_blob_rw_a_b');
@@ -42,5 +42,31 @@ test('GET /api/photo-upload explains an empty or invalid token variable', async 
   } finally {
     if (saved === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
     else process.env.BLOB_READ_WRITE_TOKEN = saved;
+  }
+});
+
+test('blobUploadMode: 토큰이 있으면 token, 저장소 ID 만 있으면 oidc, 둘 다 없으면 null', () => {
+  assert.equal(blobUploadMode({ BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_a_b', BLOB_STORE_ID: 'store_1' }), 'token');
+  assert.equal(blobUploadMode({ BLOB_STORE_ID: 'store_1' }), 'oidc');
+  assert.equal(blobUploadMode({ BLOB_STORE_ID: '  ' }), null);
+  assert.equal(blobUploadMode({}), null);
+});
+
+test('GET /api/photo-upload: 토큰 없이 BLOB_STORE_ID 만 있어도(OIDC) 올릴 수 있다고 알려준다', async () => {
+  const { call } = require('./helpers/fake-api.js');
+  const handlerPath = require.resolve('../api/photo-upload.js');
+  const savedToken = process.env.BLOB_READ_WRITE_TOKEN;
+  const savedStore = process.env.BLOB_STORE_ID;
+  try {
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    process.env.BLOB_STORE_ID = 'store_test';
+    delete require.cache[handlerPath];
+    const res = await call(require(handlerPath), { method: 'GET' });
+    assert.deepEqual(res.body, { ready: true, mode: 'oidc' });
+  } finally {
+    if (savedToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
+    else process.env.BLOB_READ_WRITE_TOKEN = savedToken;
+    if (savedStore === undefined) delete process.env.BLOB_STORE_ID;
+    else process.env.BLOB_STORE_ID = savedStore;
   }
 });
