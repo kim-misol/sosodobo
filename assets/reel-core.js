@@ -19,6 +19,21 @@
     titleCards: true,
   };
 
+  /** 직접 입력하는 초 설정의 허용 범위 (영상은 최대 60초라 클립도 60초까지). */
+  var SEC_LIMITS = {
+    photoSec: { min: 0.1, max: 30 },
+    clipMaxSec: { min: 0.1, max: 60 },
+  };
+
+  /** '0.5' · '.5' · '0,5' → 0.5 (소수 둘째 자리까지). 비었거나 범위 밖이면 null. */
+  function parseSeconds(value, key) {
+    var limit = SEC_LIMITS[key] || { min: 0.1, max: 60 };
+    var text = String(value === null || value === undefined ? '' : value).trim().replace(',', '.');
+    if (!/^\d*\.?\d+$/.test(text)) return null;
+    var n = Math.round(Number(text) * 100) / 100;
+    return n >= limit.min && n <= limit.max ? n : null;
+  }
+
   // ---------------------------------------------------------------------------
   // 고르기
   // ---------------------------------------------------------------------------
@@ -142,10 +157,12 @@
 
     var t0 = 0;
     return raw.map(function (seg, i) {
-      var start = i === 0 ? 0 : Math.max(0, t0 - o.transitionSec);
+      // 전환은 앞·뒤 구간 길이의 절반을 넘지 않게 (0.5초 사진처럼 짧아도 순서가 꼬이지 않도록)
+      var fade = i === 0 ? 0 : round3(Math.min(o.transitionSec, raw[i - 1].dur / 2, seg.dur / 2));
+      var start = i === 0 ? 0 : Math.max(0, t0 - fade);
       var end = start + seg.dur;
       t0 = end;
-      var out = Object.assign({}, seg, { start: round3(start), end: round3(end), fadeIn: i === 0 ? 0 : o.transitionSec });
+      var out = Object.assign({}, seg, { start: round3(start), end: round3(end), fadeIn: fade });
       delete out.dur;
       return out;
     });
@@ -292,6 +309,8 @@
     formatLength: formatLength,
     contributors: contributors,
     kenBurnsFor: kenBurnsFor,
+    SEC_LIMITS: SEC_LIMITS,
+    parseSeconds: parseSeconds,
     buildTimeline: buildTimeline,
     totalDuration: totalDuration,
     segmentsAt: segmentsAt,

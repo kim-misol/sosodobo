@@ -70,6 +70,18 @@
     }).join('') + '</select>';
   }
 
+  /** 초 직접 입력 (소수점 가능, 예: 0.5). 잘못된 값이면 경고만 보이고 이전 값을 그대로 씁니다. */
+  function secondsHtml(name, label, prefix) {
+    var limit = R.SEC_LIMITS[name];
+    return '<label>' + label +
+      '<span class="rl-sec">' + (prefix ? '<span class="rl-sec-unit">' + prefix + '</span>' : '') +
+      '<input type="number" name="' + name + '" value="' + opts[name] + '" min="' + limit.min + '" max="' + limit.max +
+      '" step="0.1" inputmode="decimal" aria-describedby="rl-' + name + '-err">' +
+      '<span class="rl-sec-unit">초</span></span>' +
+      '<span class="rl-sec-err" id="rl-' + name + '-err" data-rl-err="' + name + '" hidden>' +
+      limit.min + '~' + limit.max + '초 사이로 입력해 주세요</span></label>';
+  }
+
   function checkHtml(name, label) {
     return '<label class="rl-check"><input type="checkbox" name="' + name + '"' + (opts[name] ? ' checked' : '') + '> ' + label + '</label>';
   }
@@ -88,8 +100,8 @@
         return [d, d + '일차' + (date ? ' · ' + date : '')];
       }))) + '</label>' +
       '<label>좋아요' + selectHtml('minLikes', opts.minLikes, [[0, '모두'], [1, '♥ 1개 이상'], [2, '♥ 2개 이상'], [3, '♥ 3개 이상']]) + '</label>' +
-      '<label>사진 1장' + selectHtml('photoSec', opts.photoSec, [[2, '2초'], [3, '3초'], [4, '4초']]) + '</label>' +
-      '<label>영상 클립' + selectHtml('clipMaxSec', opts.clipMaxSec, [[3, '앞 3초'], [5, '앞 5초'], [10, '앞 10초']]) + '</label>' +
+      secondsHtml('photoSec', '사진 1장') +
+      secondsHtml('clipMaxSec', '영상 클립', '앞') +
       '<label>화면' + selectHtml('aspect', opts.aspect, [['landscape', '가로 16:9 (TV·노트북)'], ['portrait', '세로 9:16 (휴대폰)']]) + '</label>' +
       '<label>배경음악<input type="file" name="bgm" accept="audio/*"></label>' +
       '</div>' +
@@ -117,11 +129,18 @@
     el.textContent = items.length ? R.summarizeReel(tl).text : '조건에 맞는 사진·영상이 없어요.';
   }
 
-  function readForm(form) {
+  /** typing=true 면 입력 중이라 오류 문구는 새로 띄우지 않습니다 (예: '0.5' 를 치는 중의 '0'). */
+  function readForm(form, typing) {
     opts.day = form.day.value === 'all' ? 'all' : Number(form.day.value);
     opts.minLikes = Number(form.minLikes.value);
-    opts.photoSec = Number(form.photoSec.value);
-    opts.clipMaxSec = Number(form.clipMaxSec.value);
+    ['photoSec', 'clipMaxSec'].forEach(function (key) {
+      var sec = R.parseSeconds(form[key].value, key);
+      var err = form.querySelector('[data-rl-err="' + key + '"]');
+      var invalid = sec === null && !typing;
+      if (err && (sec !== null || !typing)) err.hidden = !invalid;
+      if (sec !== null || !typing) form[key].setAttribute('aria-invalid', invalid ? 'true' : 'false');
+      if (sec !== null) opts[key] = sec;
+    });
     opts.aspect = form.aspect.value;
     opts.titleCards = form.titleCards.checked;
     opts.showMeta = form.showMeta.checked;
@@ -667,6 +686,12 @@
     });
 
     els.root.addEventListener('input', function (e) {
+      // 초 입력은 타이핑하는 동안에도 전체 길이 요약을 바로 갱신합니다.
+      if (e.target.form && e.target.form.classList.contains('rl-form') && R.SEC_LIMITS[e.target.name]) {
+        readForm(e.target.form, true);
+        updateSummary();
+        return;
+      }
       if (e.target.getAttribute('data-rl') === 'bar' && player) seek(Number(e.target.value));
     });
 

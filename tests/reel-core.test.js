@@ -199,3 +199,31 @@ test('reelFileName describes the scope and date', () => {
   assert.equal(R.reelFileName({ day: 'all' }, 'video/mp4', now), '남해바래길_전체_20261006.mp4');
   assert.equal(R.reelFileName({ day: 2, minLikes: 1 }, 'video/webm;codecs=vp9', now), '남해바래길_2일차_베스트_20261006.webm');
 });
+
+// ---- 초 직접 입력 ------------------------------------------------------------
+
+test('parseSeconds: 소수점 초를 읽고 범위를 벗어나거나 잘못된 값은 null', () => {
+  assert.equal(R.parseSeconds('0.5', 'photoSec'), 0.5);
+  assert.equal(R.parseSeconds('.5', 'photoSec'), 0.5);
+  assert.equal(R.parseSeconds('0,5', 'photoSec'), 0.5);
+  assert.equal(R.parseSeconds(' 2.25 ', 'photoSec'), 2.25);
+  assert.equal(R.parseSeconds('1.234', 'photoSec'), 1.23);
+  assert.equal(R.parseSeconds(7, 'clipMaxSec'), 7);
+  assert.equal(R.parseSeconds('', 'photoSec'), null);
+  assert.equal(R.parseSeconds('abc', 'photoSec'), null);
+  assert.equal(R.parseSeconds('0', 'photoSec'), null);
+  assert.equal(R.parseSeconds('-1', 'photoSec'), null);
+  assert.equal(R.parseSeconds('0.05', 'photoSec'), null);
+  assert.equal(R.parseSeconds(String(R.SEC_LIMITS.photoSec.max + 1), 'photoSec'), null);
+  assert.equal(R.parseSeconds(String(R.SEC_LIMITS.clipMaxSec.max + 1), 'clipMaxSec'), null);
+});
+
+test('buildTimeline: 0.5초 같은 짧은 길이에서도 전환이 구간보다 길어지지 않는다', () => {
+  const photos = [1, 2, 3].map((id) => ({ id, mediaType: 'image', day: 1, takenAt: `2026-10-03T0${id}:00:00Z` }));
+  const tl = R.buildTimeline(photos, { photoSec: 0.5, transitionSec: 0.6, titleCards: false });
+  // 전환 = min(0.6, 0.5/2, 0.5/2) = 0.25 → 0~0.5, 0.25~0.75, 0.5~1
+  assert.deepEqual(tl.map((s) => [s.start, s.end, s.fadeIn]), [[0, 0.5, 0], [0.25, 0.75, 0.25], [0.5, 1, 0.25]]);
+  tl.forEach((s, i) => { if (i) assert.ok(s.start >= tl[i - 1].start, '앞 구간보다 먼저 시작하지 않음'); });
+  const clip = R.buildTimeline([items[2]], { clipMaxSec: 1.5, transitionSec: 0.6, titleCards: false });
+  assert.equal(clip[0].clipDuration, 1.5);
+});
