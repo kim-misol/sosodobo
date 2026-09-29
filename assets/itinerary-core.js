@@ -16,6 +16,8 @@
     { key: 'taxi', label: '택시', icon: '🚕' },
     { key: 'bus', label: '버스', icon: '🚌' },
     { key: 'train', label: '기차', icon: '🚆' },
+    { key: 'plane', label: '비행기', icon: '✈️' },
+    { key: 'ship', label: '배', icon: '⛴️' },
     { key: 'walk', label: '도보', icon: '🚶' },
     { key: 'other', label: '기타', icon: '🧭' },
   ];

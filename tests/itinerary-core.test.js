@@ -57,7 +57,7 @@ test('validateItem move: 수단 · 언제(기본 코스 전) · 셋 중 하나�
   assert.equal(I.validateItem('move', { memo: '버스 801번' }).value.timing, 'before');
   assert.equal(I.validateItem('move', { memo: '버스' }).value.mode, 'other');
   assert.match(I.validateItem('move', {}).error, /하나는/);
-  assert.match(I.validateItem('move', { memo: 'x', mode: 'plane' }).error, /이동 수단/);
+  assert.match(I.validateItem('move', { memo: 'x', mode: 'rocket' }).error, /이동 수단/);
 });
 
 test('validateItem parking · partial 수정', () => {
@@ -186,4 +186,10 @@ test('validateDayPhoto: 하루 10장 · 주소 · 설명 길이', () => {
   assert.match(I.validateDayPhoto({ url: B + '/trips/9/preview/1.jpg' }, 5, 0).error, /주소/);
   assert.match(I.validateDayPhoto({ url: B + '/trips/5/preview/1.jpg', caption: 'x'.repeat(101) }, 5, 0).error, /100자/);
   assert.equal(I.previewPath(5, 'thumb', 1700000000000, 'a/b!c'), 'trips/5/preview/1700000000000-abc-t.jpg');
+});
+
+test('이동 수단: 비행기 · 배도 고를 수 있다', () => {
+  assert.equal(I.validateItem('move', { fromPlace: '김포', toPlace: '제주', mode: 'plane' }).value.mode, 'plane');
+  assert.equal(I.validateItem('move', { fromPlace: '삼천포항', toPlace: '제주항', mode: 'ship' }).value.mode, 'ship');
+  assert.deepEqual(I.MOVE_MODES.map((m) => m.label), ['자가용', '택시', '버스', '기차', '비행기', '배', '도보', '기타']);
 });
