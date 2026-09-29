@@ -46,6 +46,13 @@ async function allInTrip(tripId, ids) {
   return Number(r.rows[0] && r.rows[0].n) === uniq.length;
 }
 
+/** 숙소와 연결된 지출이면 true (숙소에서만 고치고 지우도록) */
+async function isLodgingExpense(id, tripId) {
+  const r = await sql`SELECT 1 FROM lodgings WHERE expense_id = ${id} AND trip_id = ${tripId}`;
+  return r.rows.length > 0;
+}
+const LODGING_LOCKED = { error: '숙소와 연결된 지출이에요. 일정의 숙소에서 고치거나 지워 주세요.', code: 'lodging_expense' };
+
 // 참여자 분담 행을 채워 넣습니다.
 async function insertSplits(expenseId, participantIds) {
   for (const tid of participantIds) {
@@ -83,6 +90,7 @@ async function handler(req, res) {
       if (!Number.isInteger(id)) {
         return res.status(400).json({ error: '수정할 지출 id가 필요합니다.' });
       }
+      if (await isLodgingExpense(id, req.tripId)) return res.status(409).json(LODGING_LOCKED);
       const parsed = parseExpense(readBody(req));
       if (parsed.error) return res.status(400).json({ error: parsed.error });
       const { description, amount, payerId, participantIds } = parsed.value;
@@ -110,6 +118,7 @@ async function handler(req, res) {
       if (!Number.isInteger(id)) {
         return res.status(400).json({ error: '삭제할 지출 id가 필요합니다.' });
       }
+      if (await isLodgingExpense(id, req.tripId)) return res.status(409).json(LODGING_LOCKED);
       await sql`DELETE FROM expenses WHERE id = ${id} AND trip_id = ${req.tripId}`;
       return res.status(200).json({ ok: true });
     }

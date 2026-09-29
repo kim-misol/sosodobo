@@ -899,6 +899,14 @@
   .it-map-hint{margin:0;font-size:12.5px;color:var(--sea);font-weight:600;}
   .it-inline{flex-direction:row;}
   .it-inline label{flex:1;}
+  .st-lodging-tag{display:inline-block;font-size:11px;font-weight:700;color:var(--sea);background:#e3ebdf;border-radius:999px;padding:1px 7px;vertical-align:1px;}
+  .it-warn{margin:8px 0 0;font-size:13px;color:#8a3413;background:#fbe6dd;border-radius:10px;padding:8px 12px;}
+  .it-guests{display:flex;flex-wrap:wrap;gap:6px;}
+  .it-guests label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--sand);border-radius:999px;padding:6px 12px;font-size:14px;color:var(--ink);font-weight:600;cursor:pointer;}
+  .it-guests label:has(input:checked){border-color:var(--sea);background:#e3ebdf;color:var(--sea);}
+  .it-guests input{accent-color:var(--sea);margin:0;}
+  .it-per{margin:0;font-size:13px;color:var(--sea);font-weight:700;}
+  .it-expense{display:flex;flex-direction:column;gap:8px;border:1px dashed var(--line);border-radius:12px;padding:10px 12px;}
   .tui-form textarea,.tui-form select{border:1px solid var(--line);background:var(--sand);border-radius:10px;padding:10px 12px;font-size:16px;font-family:inherit;color:var(--ink);width:100%;}
   .nav-trip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--ink);font-family:inherit;flex-shrink:0;}
   .auth-viewer-bar{position:sticky;top:0;z-index:70;display:flex;align-items:center;gap:10px;justify-content:space-between;

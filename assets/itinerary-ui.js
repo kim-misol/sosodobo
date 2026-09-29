@@ -28,6 +28,18 @@
       });
     });
   }
+  /** 이 여행 사람들 (정산 쪽 목록 → 없으면 사진 쪽 목록) */
+  function people() {
+    var s = window.SettleUI && window.SettleUI.state;
+    if (s && s.travelers && s.travelers.length) return s.travelers;
+    var p = window.PhotoUI && window.PhotoUI.state;
+    return (p && p.travelers) || [];
+  }
+  function nameOf(id) {
+    var t = people().find(function (x) { return x.id === id; });
+    return t ? t.name : '?';
+  }
+  function won(n) { return Number(n).toLocaleString('ko-KR') + '원'; }
   function modeOf(key) { return I.MOVE_MODES.find(function (m) { return m.key === key; }) || I.MOVE_MODES[I.MOVE_MODES.length - 1]; }
 
   // ---------------------------------------------------------------------------
@@ -89,10 +101,26 @@
       '<div class="lodge-info"><div class="name">' + esc(l.name) + '</div>' +
       (nightly ? '<span class="price">' + esc(nightly) + '</span>' : '') +
       (l.memo ? '<p>' + esc(l.memo) + '</p>' : '') +
-      (guests ? '<p>' + guests + '명이 나눠서 결제' + (l.nights > 1 ? ' · ' + l.nights + '박' : '') + '</p>' : '') +
+      (guests ? '<p>' + guests + '명이 나눠서 결제' + (l.nights > 1 ? ' · ' + l.nights + '박' : '') +
+        (I.perPersonCost(l.cost, guests) ? ' · 1인 ' + won(I.perPersonCost(l.cost, guests)) : '') + '</p>' : '') +
       mapLinkHtml(l.mapUrl, l.mapProvider) + (l.mapUrl && l.linkUrl ? '<br>' : '') +
       (l.linkUrl ? mapLinkHtml(l.linkUrl, null, '숙소 소개글 보기') : '') +
       '</div></div>';
+  }
+
+  /** 그날 밤 숙소 배정 경고 (겹친 사람 · 숙소 미정) */
+  function coverageWarning(date) {
+    var ids = people().map(function (t) { return t.id; });
+    if (!ids.length) return '';
+    var c = I.nightlyCoverage([date], state.data.lodgings || [], ids)[date];
+    var out = [];
+    if (c.doubled.length) out.push('두 숙소에 모두 들어 있어요: ' + c.doubled.map(nameOf).join(', '));
+    if (c.missing.length) out.push('숙소 미정: ' + c.missing.map(nameOf).join(', '));
+    return out.length ? '<p class="it-warn">⚠️ ' + esc(out.join(' · ')) + '</p>' : '';
+  }
+  function tripEnded() {
+    var sc = window.ShellCore;
+    return !!(sc && state.trip && sc.tripPhase(state.trip.startDate, state.trip.days, Date.now()) === 'after');
   }
 
   function lodgingsForDate(date) {
@@ -119,7 +147,8 @@
     if (!free) g.courses.forEach(function (c, i) { out += courseHtml(c, i, g.courses.length); });
     if (day.photos.length) out += carouselHtml(day, (!free && g.courses[0] ? g.courses[0].name.replace(/^\d+코스\s*/, '') : day.title) || 'DAY ' + day.dayNo);
     if (g.movesAfter.length) out += '<div class="block"><h3>🚕 이동</h3><div class="it-rows">' + g.movesAfter.map(moveHtml).join('') + '</div></div>';
-    if (lodgings.length) out += '<div class="block"><h3>🏠 숙소</h3>' + lodgings.map(lodgingHtml).join('') + '</div>';
+    // 숙소 배정 경고는 여행이 끝나기 전까지만 일정에 보여 줌 (편집 화면에서는 항상)
+    if (lodgings.length) out += '<div class="block"><h3>🏠 숙소</h3>' + lodgings.map(lodgingHtml).join('') + (tripEnded() ? '' : coverageWarning(day.date)) + '</div>';
     return out + '</section>';
   }
 
@@ -176,7 +205,7 @@
   function closeSheet() {
     if (sheet) { sheet.remove(); sheet = null; }
     document.body.classList.remove('tsheet-open');
-    state.editingDay = null; state.view = 'day'; state.item = null; state.error = null;
+    state.editingDay = null; state.view = 'day'; state.item = null; state.lodging = null; state.error = null;
   }
   function currentDay() { return state.data.days.find(function (d) { return d.dayNo === state.editingDay; }); }
 
@@ -255,12 +284,89 @@
       '<button type="submit" class="tui-btn primary">' + (it ? '저장' : '추가') + '</button></form>';
   }
 
+  function lodgingFormHtml(l, day) {
+    var v = l || {};
+    var edit = !!l;
+    var checkIn = v.checkIn || day.date;
+    var idx = state.data.days.findIndex(function (d) { return d.date === checkIn; });
+    var maxNights = Math.max(1, state.data.days.length - Math.max(0, idx));
+    var guests = edit ? v.guestIds : people().map(function (t) { return t.id; });
+    var addExpense = edit ? !!v.expenseId : true;
+    var me = window.TripContext && window.TripContext.trip && window.TripContext.trip.travelerId;
+    var payer = v.payerId || me || (people()[0] && people()[0].id);
+    var f = function (name, label, attrs, val) {
+      return '<label><span>' + label + '</span><input name="' + name + '" ' + (attrs || '') + ' value="' + esc(val === undefined ? v[name] : val) + '"></label>';
+    };
+    return '<form class="tui-form" data-it-form="lodging"' + (edit ? ' data-lodging="' + v.id + '"' : '') + ' autocomplete="off" novalidate>' +
+      f('name', '숙소 이름 <em>*</em>', 'maxlength="60" required placeholder="예: 파도가 머무는 정원"') +
+      '<div class="tui-two"><label><span>체크인</span><select name="checkIn">' + state.data.days.map(function (d) {
+        return '<option value="' + d.date + '"' + (d.date === checkIn ? ' selected' : '') + '>DAY ' + d.dayNo + ' · ' + esc(d.dateLabel) + '</option>';
+      }).join('') + '</select></label>' +
+      '<label><span>몇 박</span><select name="nights">' + Array.from({ length: maxNights }, function (_, i) {
+        var n = i + 1;
+        return '<option value="' + n + '"' + ((v.nights || 1) === n ? ' selected' : '') + '>' + n + '박</option>';
+      }).join('') + '</select></label></div>' +
+      f('cost', '총 비용 <span class="tui-opt">(선택)</span>', 'inputmode="text" placeholder="예: 300000 또는 30만"', v.cost === null || v.cost === undefined ? '' : v.cost) +
+      '<fieldset class="tui-radios"><legend>함께 묵는 사람</legend><div class="it-guests">' + people().map(function (t) {
+        return '<label><input type="checkbox" name="guest" value="' + t.id + '"' + (guests.indexOf(t.id) >= 0 ? ' checked' : '') + '>' + esc(t.name) + '</label>';
+      }).join('') + '</div></fieldset>' +
+      '<p class="it-per" data-it="per"></p>' +
+      f('mapUrl', '지도 링크 <span class="tui-opt">(카카오 · 네이버 · 구글)</span>', 'inputmode="url" placeholder="지도 앱의 공유 링크 붙여넣기"') +
+      '<p class="it-map-hint" data-it="map-hint" hidden></p>' +
+      f('address', '주소 <span class="tui-opt">(선택)</span>', 'maxlength="120"') +
+      f('linkUrl', '숙소 소개 · 예약 링크 <span class="tui-opt">(선택)</span>', 'inputmode="url" placeholder="https://"') +
+      '<label><span>메모 <span class="tui-opt">(체크인 시간 · 시설 등)</span></span><textarea name="memo" maxlength="300" rows="2">' + esc(v.memo) + '</textarea></label>' +
+      '<div class="it-expense"><label class="tui-toggle"><input type="checkbox" name="addExpense"' + (addExpense ? ' checked' : '') + '>' +
+      '<span><b>숙소비를 지출에 추가</b>함께 묵는 사람끼리 나눠 내도록 정산에 넣어요. 숙소를 고치면 정산도 같이 바뀌어요.</span></label>' +
+      '<label data-it="payer"' + (addExpense ? '' : ' hidden') + '><span>결제한 사람</span><select name="payerId">' + people().map(function (t) {
+        return '<option value="' + t.id + '"' + (t.id === payer ? ' selected' : '') + '>' + esc(t.name) + '</option>';
+      }).join('') + '</select></label></div>' +
+      '<button type="submit" class="tui-btn primary">' + (edit ? '저장' : '추가') + '</button></form>';
+  }
+
+  function readLodgingForm(form) {
+    return {
+      name: form.name.value, checkIn: form.checkIn.value, nights: Number(form.nights.value), cost: form.cost.value,
+      guestIds: Array.prototype.filter.call(form.querySelectorAll('input[name="guest"]'), function (c) { return c.checked; }).map(function (c) { return Number(c.value); }),
+      mapUrl: form.mapUrl.value, address: form.address.value, linkUrl: form.linkUrl.value, memo: form.memo.value,
+      addExpense: form.addExpense.checked, payerId: Number(form.payerId.value),
+    };
+  }
+
+  /** 1인당 금액 · 결제한 사람 칸 · 박 수 선택지를 입력에 맞춰 */
+  function updateLodgingForm() {
+    var form = sheet && sheet.querySelector('form[data-it-form="lodging"]');
+    if (!form) return;
+    var b = readLodgingForm(form);
+    var won0 = I.parseWon(b.cost);
+    var per = I.perPersonCost(Number.isFinite(won0) ? won0 : null, b.guestIds.length);
+    var perBox = form.querySelector('[data-it="per"]');
+    perBox.textContent = per ? b.guestIds.length + '명이 나눠 내면 1인 ' + won(per) : '';
+    form.querySelector('[data-it="payer"]').hidden = !b.addExpense;
+    var idx = state.data.days.findIndex(function (d) { return d.date === b.checkIn; });
+    var max = Math.max(1, state.data.days.length - Math.max(0, idx));
+    if (form.nights.options.length !== max) {
+      form.nights.innerHTML = Array.from({ length: max }, function (_, i) {
+        return '<option value="' + (i + 1) + '"' + (Math.min(b.nights, max) === i + 1 ? ' selected' : '') + '>' + (i + 1) + '박</option>';
+      }).join('');
+    }
+  }
+
   function drawSheet() {
     if (!sheet) return;
     var day = currentDay();
     var box = sheet.querySelector('.tsheet');
     var head = '<span class="tsheet-grab" aria-hidden="true"></span><button type="button" class="tsheet-x" data-it="close" aria-label="닫기">×</button>';
     var err = state.error ? '<p class="tui-err" role="alert">' + esc(state.error) + '</p>' : '';
+    if (state.view === 'lodging') {
+      box.innerHTML = head + '<button type="button" class="it-back" data-it="back">‹ DAY ' + day.dayNo + ' 편집</button>' +
+        '<h2>' + (state.lodging ? '숙소 고치기' : '숙소 추가') + '</h2>' + err + lodgingFormHtml(state.lodging, day);
+      updateLodgingForm();
+      updateMapHint();
+      var firstInput = box.querySelector('input[name="name"]');
+      if (firstInput && !state.lodging) firstInput.focus();
+      return;
+    }
     if (state.view === 'item') {
       var kind = state.item ? state.item.kind : state.addKind;
       box.innerHTML = head + '<button type="button" class="it-back" data-it="back">‹ DAY ' + day.dayNo + ' 편집</button>' +
@@ -276,14 +382,22 @@
       (day.planMode === 'free' ? '' : listHtml(day, 'course', g.courses)) +
       listHtml(day, 'move', g.movesBefore.concat(g.movesAfter)) +
       listHtml(day, 'parking', g.parking) +
-      '<section class="it-sec"><div class="it-sec-head"><h3>숙소</h3></div>' +
-      (lodgings.length ? lodgings.map(function (l) { return '<div class="it-row"><div class="it-row-main">🏠 ' + esc(l.name) + '<span>' + esc(l.checkIn.slice(5).replace('-', '/')) + ' 체크인 · ' + l.nights + '박</span></div></div>'; }).join('') : '<p class="it-none">이날 밤 숙소가 없어요.</p>') +
-      '<p class="it-none">숙소 추가 · 수정은 곧 추가돼요.</p></section>' +
+      '<section class="it-sec"><div class="it-sec-head"><h3>이날 밤 숙소</h3>' +
+      '<button type="button" class="it-add" data-it="add-lodging">+ 숙소 추가</button></div>' +
+      (lodgings.length ? lodgings.map(function (l) {
+        var per = I.perPersonCost(l.cost, l.guestIds.length);
+        return '<div class="it-row"><div class="it-row-main">🏠 ' + esc(l.name) + '<span>' +
+          esc([l.checkIn.slice(5).replace('-', '/') + ' 체크인 · ' + l.nights + '박', l.cost !== null ? won(l.cost) : '', l.guestIds.length + '명' + (per ? ' · 1인 ' + won(per) : ''), l.expenseId ? '정산에 추가됨' : ''].filter(Boolean).join(' · ')) +
+          '</span></div><div class="it-row-tools">' +
+          '<button type="button" data-it="edit-lodging" data-lodging="' + l.id + '" aria-label="고치기">✎</button>' +
+          '<button type="button" data-it="del-lodging" data-lodging="' + l.id + '" aria-label="지우기">🗑</button></div></div>';
+      }).join('') : '<p class="it-none">이날 밤 숙소가 없어요.</p>') + coverageWarning(day.date) +
+      '<p class="it-none">인원이 많으면 하룻밤에 숙소를 여러 곳 넣을 수 있어요.</p></section>' +
       (day.photos.length ? '<p class="it-none">미리보기 사진 ' + day.photos.length + '장 · 사진 추가는 곧 추가돼요.</p>' : '');
   }
 
   function updateMapHint() {
-    var form = sheet && sheet.querySelector('form[data-it-form="item"]');
+    var form = sheet && sheet.querySelector('form[data-it-form="item"], form[data-it-form="lodging"]');
     var hint = form && form.querySelector('[data-it="map-hint"]');
     if (!hint || !form.mapUrl) return;
     var p = I.detectMapProvider(form.mapUrl.value);
@@ -312,7 +426,16 @@
     var day = currentDay();
     var find = function () { return day.items.find(function (x) { return x.id === itemId; }); };
     if (a === 'close') closeSheet();
-    else if (a === 'back') { state.view = 'day'; state.item = null; state.error = null; drawSheet(); }
+    else if (a === 'back') { state.view = 'day'; state.item = null; state.lodging = null; state.error = null; drawSheet(); }
+    else if (a === 'add-lodging') { state.view = 'lodging'; state.lodging = null; state.error = null; drawSheet(); }
+    else if (a === 'edit-lodging' || a === 'del-lodging') {
+      var lid = Number(b.getAttribute('data-lodging'));
+      var lod = (state.data.lodgings || []).find(function (x) { return x.id === lid; });
+      if (!lod) return;
+      if (a === 'edit-lodging') { state.view = 'lodging'; state.lodging = lod; state.error = null; drawSheet(); return; }
+      if (!confirm('「' + lod.name + '」을(를) 지울까요?' + (lod.expenseId ? '\n정산에 넣은 숙소비 지출도 함께 지워져요.' : ''))) return;
+      busyRun(api('DELETE', 'part=lodging&lodging=' + lid)).then(afterLodgingChange);
+    }
     else if (a === 'add') { state.view = 'item'; state.item = null; state.addKind = b.getAttribute('data-kind'); state.error = null; drawSheet(); }
     else if (a === 'edit-item') { state.view = 'item'; state.item = find(); state.error = null; drawSheet(); }
     else if (a === 'del-item') {
@@ -324,7 +447,13 @@
     }
   }
 
+  /** 숙소가 바뀌면 정산(지출 기록)도 다시 불러옴 */
+  function afterLodgingChange() {
+    if (!state.error && window.SettleUI && window.SettleUI.reload) window.SettleUI.reload();
+  }
+
   function onSheetChange(e) {
+    if (e.target.closest('form[data-it-form="lodging"]')) updateLodgingForm();
     if (e.target.name === 'planMode') {
       var note = sheet.querySelector('[data-it="free-note"]');
       if (note) note.hidden = e.target.value !== 'free';
@@ -357,6 +486,18 @@
       busyRun(api('PATCH', 'part=day&day=' + day.dayNo, body));
       return;
     }
+    if (form.getAttribute('data-it-form') === 'lodging') {
+      var lb = readLodgingForm(form);
+      var lv = I.validateLodging(lb, { startDate: state.trip.startDate, days: state.data.days.length, travelerIds: people().map(function (t) { return t.id; }) });
+      if (lv.error) { state.error = lv.error; drawSheet(); restoreLodging(lb); return; }
+      var editing = state.lodging;
+      if (editing && editing.expenseId && !lb.addExpense && !confirm('"숙소비를 지출에 추가"를 끄면 정산에 넣은 숙소비 지출이 지워져요. 계속할까요?')) return;
+      busyRun(editing ? api('PATCH', 'part=lodging&lodging=' + editing.id, lb) : api('POST', 'part=lodging', lb)).then(function () {
+        if (!state.error) { state.view = 'day'; state.lodging = null; drawSheet(); afterLodgingChange(); }
+        else restoreLodging(lb);
+      });
+      return;
+    }
     var data = readItemForm(form);
     var editId = form.getAttribute('data-item');
     var v = I.validateItem(data.kind, data);
@@ -365,6 +506,19 @@
       if (!state.error) { state.view = 'day'; state.item = null; drawSheet(); }
       else restoreForm(data);
     });
+  }
+
+  function restoreLodging(b) {
+    var form = sheet && sheet.querySelector('form[data-it-form="lodging"]');
+    if (!form) return;
+    ['name', 'checkIn', 'cost', 'mapUrl', 'address', 'linkUrl', 'memo'].forEach(function (k) { if (form[k]) form[k].value = b[k] === undefined || b[k] === null ? '' : b[k]; });
+    updateLodgingForm();
+    form.nights.value = String(b.nights);
+    Array.prototype.forEach.call(form.querySelectorAll('input[name="guest"]'), function (c) { c.checked = b.guestIds.indexOf(Number(c.value)) >= 0; });
+    form.addExpense.checked = b.addExpense;
+    if (b.payerId) form.payerId.value = String(b.payerId);
+    updateLodgingForm();
+    updateMapHint();
   }
 
   /** 오류로 시트를 다시 그려도 입력한 값은 그대로 */
@@ -380,10 +534,22 @@
     updateMapHint();
   }
 
-  document.addEventListener('input', function (e) { if (sheet && e.target.name === 'mapUrl') updateMapHint(); });
+  document.addEventListener('input', function (e) {
+    if (!sheet) return;
+    if (e.target.name === 'mapUrl') updateMapHint();
+    if (e.target.closest('form[data-it-form="lodging"]')) updateLodgingForm();
+  });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && sheet) closeSheet(); });
 
   function bind() {
+    // 사람 목록이 늦게 오면(정산 불러오기) 숙소 인원·경고를 다시 그림
+    if (window.SettleUI && window.SettleUI.onChange) {
+      var lastKey = '';
+      window.SettleUI.onChange(function (st) {
+        var key = (st.travelers || []).map(function (t) { return t.id; }).join(',');
+        if (state.data && key !== lastKey && !st.loading) { lastKey = key; render(); }
+      });
+    }
     els.box.addEventListener('click', function (e) {
       var b = e.target.closest('[data-it="edit-day"]');
       if (!b) return;

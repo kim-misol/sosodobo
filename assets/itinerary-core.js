@@ -230,11 +230,111 @@
     return v.toLocaleString('ko-KR') + '원';
   }
 
+  // ---------------------------------------------------------------------------
+  // 숙소
+  // ---------------------------------------------------------------------------
+  var LODGING = { nameMax: 60, memoMax: 300, addressMax: 120, costMax: 1000000000 };
+
+  function dayIndex(startDate, date) {
+    var a = Date.parse(startDate + 'T00:00:00Z');
+    var b = Date.parse(date + 'T00:00:00Z');
+    return Number.isFinite(a) && Number.isFinite(b) ? Math.round((b - a) / 86400000) : NaN;
+  }
+
+  /**
+   * 숙소 검증. ctx = { startDate, days, travelerIds }.
+   * - 체크인은 여행 기간 안, 묵는 밤은 여행 마지막 날 밤까지
+   * - 함께 묵는 사람은 이 여행 사람만 (비우면 전원)
+   * - addExpense 면 비용(1원 이상) · 결제한 사람(이 여행 사람) · 묵는 사람 1명 이상 필요
+   * → { value } | { error }
+   */
+  function validateLodging(input, ctx) {
+    var b = input || {};
+    var c = ctx || {};
+    var ids = (c.travelerIds || []).map(Number);
+    var out = {};
+    var err = textField(out, b, 'name', 'name', LODGING.nameMax, '숙소 이름', true, false) ||
+      textField(out, b, 'memo', 'memo', LODGING.memoMax, '메모', false, false) ||
+      textField(out, b, 'address', 'address', LODGING.addressMax, '주소', false, false);
+    if (err) return { error: err };
+    var idx = dayIndex(c.startDate, clean(b.checkIn));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(clean(b.checkIn)) || !(idx >= 0 && idx < c.days)) return { error: '체크인 날짜는 여행 기간 안에서 골라 주세요.' };
+    out.checkIn = clean(b.checkIn);
+    var nights = Number(b.nights === undefined || b.nights === '' ? 1 : b.nights);
+    if (!Number.isInteger(nights) || nights < 1) return { error: '몇 박인지 1박 이상으로 골라 주세요.' };
+    if (idx + nights > c.days) return { error: '여행 마지막 날 밤까지만 묵을 수 있어요. 박 수를 줄여 주세요.' };
+    out.nights = nights;
+    var cost = typeof b.cost === 'number' ? b.cost : parseWon(b.cost);
+    if (Number.isNaN(cost) || (cost !== null && (!Number.isInteger(cost) || cost < 0 || cost > LODGING.costMax))) return { error: '비용은 숫자로 입력해 주세요 (예: 170000 또는 17만).' };
+    out.cost = cost;
+    var guests = Array.isArray(b.guestIds) ? b.guestIds.map(Number) : ids.slice();
+    guests = guests.filter(function (g, i) { return guests.indexOf(g) === i; });
+    if (guests.some(function (g) { return ids.indexOf(g) < 0; })) return { error: '이 여행에 없는 사람이 들어 있어요.' };
+    out.guestIds = guests;
+    var mu = safeUrl(b.mapUrl);
+    if (mu === undefined) return { error: '지도 링크는 https:// 로 시작하는 주소를 붙여넣어 주세요.' };
+    out.mapUrl = mu;
+    var lu = safeUrl(b.linkUrl);
+    if (lu === undefined) return { error: '참고 링크는 https:// 로 시작하는 주소를 붙여넣어 주세요.' };
+    out.linkUrl = lu;
+    out.addExpense = !!b.addExpense;
+    if (out.addExpense) {
+      if (!(cost > 0)) return { error: '숙소비를 지출에 추가하려면 비용을 입력해 주세요.' };
+      if (!guests.length) return { error: '숙소비를 나눠 낼 사람(함께 묵는 사람)을 한 명 이상 골라 주세요.' };
+      var payer = Number(b.payerId);
+      if (ids.indexOf(payer) < 0) return { error: '결제한 사람을 골라 주세요.' };
+      out.payerId = payer;
+    }
+    return { value: out };
+  }
+
+  /** '170,000원' · '17만' · '12.5만원' → 숫자 (비었으면 null, 못 읽으면 NaN) */
+  function parseWon(v) {
+    var t = clean(v).replace(/[,\s]/g, '').replace(/원$/, '');
+    if (!t) return null;
+    var m = /^(\d+(?:\.\d+)?)만$/.exec(t);
+    if (m) return Math.round(Number(m[1]) * 10000);
+    return /^\d+$/.test(t) ? Number(t) : NaN;
+  }
+
+  /** 1인당 금액 (반올림, 모르면 null) */
+  function perPersonCost(cost, count) {
+    if (cost === null || cost === undefined || !(count > 0)) return null;
+    return Math.round(cost / count);
+  }
+
+  /** 숙소와 연결된 지출 기록의 설명 */
+  function lodgingExpenseDescription(l) {
+    return '숙소 · ' + l.name + (l.nights > 1 ? ' (' + l.nights + '박)' : '');
+  }
+
+  /**
+   * 밤마다 숙소 배정 확인. dates 는 확인할 밤들('YYYY-MM-DD'), travelerIds 는 여행 사람.
+   * → { 'YYYY-MM-DD': { lodgingIds: [], doubled: [id…], missing: [id…] } }
+   * 숙소가 하나도 없는 밤은 missing 을 비워 둠 (아직 안 정한 밤으로 봄).
+   */
+  function nightlyCoverage(dates, lodgings, travelerIds) {
+    var out = {};
+    (dates || []).forEach(function (date) {
+      var here = (lodgings || []).filter(function (l) { return lodgingNights(l.checkIn, l.nights).indexOf(date) >= 0; });
+      var count = {};
+      here.forEach(function (l) { (l.guestIds || []).forEach(function (g) { count[g] = (count[g] || 0) + 1; }); });
+      out[date] = {
+        lodgingIds: here.map(function (l) { return l.id; }),
+        doubled: (travelerIds || []).filter(function (t) { return count[t] > 1; }),
+        missing: here.length ? (travelerIds || []).filter(function (t) { return !count[t]; }) : [],
+      };
+    });
+    return out;
+  }
+
   var ItineraryCore = {
     LIMITS: LIMITS, KINDS: KINDS, MOVE_MODES: MOVE_MODES, TIMINGS: TIMINGS, MAP_LABEL: MAP_LABEL,
     safeUrl: safeUrl, detectMapProvider: detectMapProvider, stars: stars,
     validateDay: validateDay, validateItem: validateItem, groupItems: groupItems, moveItem: moveItem,
     buildDays: buildDays, dayHasContent: dayHasContent, lodgingNights: lodgingNights, shortWon: shortWon,
+    LODGING: LODGING, validateLodging: validateLodging, perPersonCost: perPersonCost, parseWon: parseWon,
+    lodgingExpenseDescription: lodgingExpenseDescription, nightlyCoverage: nightlyCoverage,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = ItineraryCore;
   if (root) root.ItineraryCore = ItineraryCore;

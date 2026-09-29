@@ -13,6 +13,10 @@
 //   POST   ?id=5&part=item&day=2 { kind: 'course'|'move'|'parking', ... } → 그날 맨 뒤에 추가
 //   PATCH  ?id=5&part=item&item=9 { ... }  ·  DELETE ?id=5&part=item&item=9
 //   POST   ?id=5&part=item-move&item=9 { dir: -1|1 } → 같은 종류 안에서 한 칸 위/아래
+//   POST   ?id=5&part=lodging { name, checkIn, nights, cost, guestIds, mapUrl, linkUrl, memo, address, addExpense, payerId }
+//   PATCH  ?id=5&part=lodging&lodging=3 { …같은 값 전체 }  ·  DELETE ?id=5&part=lodging&lodging=3
+//          addExpense 면 숙소비 지출(설명 "숙소 · 이름", 나눠 내는 사람 = 함께 묵는 사람)을 만들고 같이 고침.
+//          끄거나 숙소를 지우면 연결된 지출도 지움 (화면에서 먼저 경고)
 const { del } = require('@vercel/blob');
 const { sql, ensureSchema, sendError, randomJoinCode } = require('./_db');
 const A = require('./_auth');
@@ -72,6 +76,7 @@ async function loadItinerary(trip) {
   const lodgings = await sql`
     SELECT l.id, l.name, to_char(l.check_in, 'YYYY-MM-DD') AS check_in, l.nights, l.cost, l.memo, l.address,
            l.map_url, l.map_provider, l.link_url, l.image_url, l.expense_id,
+           (SELECT e.payer_id FROM expenses e WHERE e.id = l.expense_id) AS payer_id,
            COALESCE((SELECT ARRAY_AGG(g.traveler_id ORDER BY g.traveler_id) FROM lodging_guests g WHERE g.lodging_id = l.id), '{}') AS guest_ids
     FROM lodgings l WHERE l.trip_id = ${trip.id} ORDER BY l.check_in, l.id`;
   const rows = days.rows.map((d) => ({
@@ -86,7 +91,8 @@ async function loadItinerary(trip) {
     lodgings: lodgings.rows.map((l) => ({
       id: l.id, name: l.name, checkIn: l.check_in, nights: l.nights, cost: l.cost === null ? null : Number(l.cost),
       memo: l.memo, address: l.address, mapUrl: l.map_url, mapProvider: l.map_provider || I.detectMapProvider(l.map_url),
-      linkUrl: l.link_url, imageUrl: l.image_url, expenseId: l.expense_id, guestIds: (l.guest_ids || []).map(Number),
+      linkUrl: l.link_url, imageUrl: l.image_url, expenseId: l.expense_id, payerId: l.payer_id,
+      guestIds: (l.guest_ids || []).map(Number),
     })),
   };
 }
@@ -103,6 +109,77 @@ async function findItem(tripId, itemId) {
   const r = await sql`
     SELECT i.* FROM day_items i JOIN trip_days d ON d.id = i.day_id WHERE i.id = ${itemId} AND d.trip_id = ${tripId}`;
   return r.rows[0] || null;
+}
+
+// ---- 숙소 ↔ 숙소비 지출 -----------------------------------------------------------
+async function setGuests(lodgingId, guestIds) {
+  await sql`DELETE FROM lodging_guests WHERE lodging_id = ${lodgingId}`;
+  for (const g of guestIds) await sql`INSERT INTO lodging_guests (lodging_id, traveler_id) VALUES (${lodgingId}, ${g}) ON CONFLICT DO NOTHING`;
+}
+
+async function setSplits(expenseId, ids) {
+  await sql`DELETE FROM expense_splits WHERE expense_id = ${expenseId}`;
+  for (const t of ids) await sql`INSERT INTO expense_splits (expense_id, traveler_id) VALUES (${expenseId}, ${t}) ON CONFLICT DO NOTHING`;
+}
+
+/** 숙소비 지출 만들기/고치기/지우기 → 연결할 expense id (없으면 null) */
+async function syncLodgingExpense(tripId, lodging, v) {
+  const current = lodging && lodging.expense_id ? (await sql`SELECT id, description FROM expenses WHERE id = ${lodging.expense_id} AND trip_id = ${tripId}`).rows[0] : null;
+  if (!v.addExpense) {
+    if (current) await sql`DELETE FROM expenses WHERE id = ${current.id}`;
+    return null;
+  }
+  const description = I.lodgingExpenseDescription(v);
+  if (current) {
+    // 직접 쓴 설명(예: 옮겨 온 "숙소1_…")은 그대로 두고, 자동으로 만든 설명만 새 이름으로
+    const keepDesc = !/^숙소 · /.test(current.description || '');
+    await sql`UPDATE expenses SET description = ${keepDesc ? current.description : description}, amount = ${v.cost}, payer_id = ${v.payerId} WHERE id = ${current.id}`;
+    await setSplits(current.id, v.guestIds);
+    return current.id;
+  }
+  const created = await sql`
+    INSERT INTO expenses (description, amount, payer_id, trip_id) VALUES (${description}, ${v.cost}, ${v.payerId}, ${tripId}) RETURNING id`;
+  await setSplits(created.rows[0].id, v.guestIds);
+  return created.rows[0].id;
+}
+
+async function handleLodging(req, res, trip, b) {
+  const lodgingId = parseInt(req.query.lodging, 10);
+  let existing = null;
+  if (req.method !== 'POST') {
+    if (!Number.isInteger(lodgingId)) return res.status(400).json({ error: '숙소 id가 필요합니다.' });
+    existing = (await sql`SELECT * FROM lodgings WHERE id = ${lodgingId} AND trip_id = ${trip.id}`).rows[0];
+    if (!existing) return res.status(404).json({ error: '이 여행에 없는 숙소예요.' });
+  }
+  if (req.method === 'DELETE') {
+    if (existing.expense_id) await sql`DELETE FROM expenses WHERE id = ${existing.expense_id} AND trip_id = ${trip.id}`;
+    await sql`DELETE FROM lodgings WHERE id = ${lodgingId}`;
+    return res.status(200).json(await loadItinerary(trip));
+  }
+  if (req.method !== 'POST' && req.method !== 'PATCH') return res.status(405).json({ error: 'POST, PATCH, DELETE만 지원합니다.' });
+  const people = await sql`SELECT id FROM travelers WHERE trip_id = ${trip.id} ORDER BY id`;
+  const parsed = I.validateLodging(b, { startDate: trip.startDate, days: trip.days, travelerIds: people.rows.map((r) => r.id) });
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const v = parsed.value;
+  const provider = I.detectMapProvider(v.mapUrl);
+  let id = lodgingId;
+  if (req.method === 'POST') {
+    const created = await sql`
+      INSERT INTO lodgings (trip_id, name, check_in, nights, cost, memo, address, map_url, map_provider, link_url)
+      VALUES (${trip.id}, ${v.name}, ${v.checkIn}, ${v.nights}, ${v.cost}, ${v.memo}, ${v.address}, ${v.mapUrl}, ${provider}, ${v.linkUrl})
+      RETURNING *`;
+    existing = created.rows[0];
+    id = existing.id;
+  } else {
+    await sql`
+      UPDATE lodgings SET name = ${v.name}, check_in = ${v.checkIn}, nights = ${v.nights}, cost = ${v.cost}, memo = ${v.memo},
+        address = ${v.address}, map_url = ${v.mapUrl}, map_provider = ${provider}, link_url = ${v.linkUrl}
+      WHERE id = ${id}`;
+  }
+  await setGuests(id, v.guestIds);
+  const expenseId = await syncLodgingExpense(trip.id, existing, v);
+  await sql`UPDATE lodgings SET expense_id = ${expenseId} WHERE id = ${id}`;
+  return res.status(req.method === 'POST' ? 201 : 200).json(await loadItinerary(trip));
 }
 
 const ITEM_COLUMNS = {
@@ -130,6 +207,8 @@ async function handleItinerary(req, res, row, ctx) {
     return res.status(403).json({ error: ctx.member ? '관리자만 일정을 고칠 수 있게 설정돼 있어요.' : '이 여행에 참여한 뒤에 고칠 수 있어요.', code: 'cannot_edit' });
   }
   const b = readBody(req);
+
+  if (part === 'lodging') return handleLodging(req, res, trip, b);
 
   if (part === 'day' && req.method === 'PATCH') {
     const dayNo = parseInt(req.query.day, 10);
@@ -268,7 +347,7 @@ async function handler(req, res) {
     const admin = !on || row.role === 'admin';
 
     // ---- 날짜별 일정 ----
-    if (['itinerary', 'day', 'item', 'item-move'].indexOf(part) >= 0) {
+    if (['itinerary', 'day', 'item', 'item-move', 'lodging'].indexOf(part) >= 0) {
       return handleItinerary(req, res, row, { on, uid, member, admin, canEdit: member && (admin || row.members_can_edit) });
     }
 

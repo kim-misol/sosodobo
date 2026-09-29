@@ -21,6 +21,7 @@ async function handler(req, res) {
 
     const expensesResult = await sql`
       SELECT e.id, e.description, e.amount, e.payer_id, e.created_at,
+             (SELECT l.id FROM lodgings l WHERE l.expense_id = e.id LIMIT 1) AS lodging_id,
              COALESCE(
                ARRAY_AGG(s.traveler_id) FILTER (WHERE s.traveler_id IS NOT NULL),
                '{}'
@@ -38,6 +39,7 @@ async function handler(req, res) {
       payerId: r.payer_id,
       participantIds: (r.participant_ids || []).map(Number),
       createdAt: r.created_at,
+      lodgingId: r.lodging_id || null, // 숙소에서 만든 지출 (정산 화면에서는 고치지 않음)
     }));
 
     return res.status(200).json({

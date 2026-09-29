@@ -205,3 +205,85 @@ test('일정 순서 바꾸기: 같은 종류 안에서만', async () => {
     assert.deepEqual(moves, [[3, 4], [4, 3]]);
   });
 });
+
+// ---- 숙소 ----------------------------------------------------------------------
+
+function lodgingSql(row, opts) {
+  const o = opts || {};
+  return itinerarySql(row, (text) => {
+    if (text.startsWith('SELECT id FROM travelers WHERE trip_id')) return { rows: [{ id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }] };
+    if (text.startsWith('INSERT INTO lodgings')) return { rows: [{ id: 30, expense_id: null }] };
+    if (text.startsWith('SELECT * FROM lodgings WHERE id')) return { rows: o.existing ? [o.existing] : [] };
+    if (text.startsWith('SELECT id, description FROM expenses WHERE id')) return { rows: o.expense ? [o.expense] : [] };
+    if (text.startsWith('INSERT INTO expenses')) return { rows: [{ id: 77 }] };
+    return null;
+  });
+}
+const lodgingBody = { name: '파도가 머무는 정원', checkIn: '2026-11-15', nights: 1, cost: 300000, guestIds: [2, 4, 5], addExpense: true, payerId: 2 };
+
+test('숙소 추가: 숙소비 지출을 만들어 연결 (나눠 내는 사람 = 함께 묵는 사람)', async () => {
+  await withEnv(ENV, async () => {
+    const sql = lodgingSql(tripRow());
+    const res = await call(loadHandler('trips.js', sql, { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'lodging' }, headers: { cookie: cookie(3) }, body: lodgingBody });
+    assert.equal(res.statusCode, 201);
+    const exp = sql.calls.find((c) => c.text.startsWith('INSERT INTO expenses'));
+    assert.deepEqual(exp.values, ['숙소 · 파도가 머무는 정원', 300000, 2, 5]);
+    const splits = sql.calls.filter((c) => c.text.startsWith('INSERT INTO expense_splits')).map((c) => c.values[1]);
+    assert.deepEqual(splits, [2, 4, 5]);
+    const guests = sql.calls.filter((c) => c.text.startsWith('INSERT INTO lodging_guests')).map((c) => c.values[1]);
+    assert.deepEqual(guests, [2, 4, 5]);
+    assert.deepEqual(sql.calls.find((c) => c.text.startsWith('UPDATE lodgings SET expense_id')).values, [77, 30]);
+  });
+});
+
+test('숙소 추가: 기간 밖 · 다른 여행 사람은 거절, 링크 구경하는 사람은 못 고침', async () => {
+  await withEnv(ENV, async () => {
+    const h = () => loadHandler('trips.js', lodgingSql(tripRow()), { '@vercel/blob': blob });
+    const out = await call(h(), { method: 'POST', query: { id: '5', part: 'lodging' }, headers: { cookie: cookie(3) }, body: Object.assign({}, lodgingBody, { checkIn: '2026-11-20' }) });
+    assert.match(out.body.error, /기간 안/);
+    const stranger = await call(h(), { method: 'POST', query: { id: '5', part: 'lodging' }, headers: { cookie: cookie(3) }, body: Object.assign({}, lodgingBody, { guestIds: [2, 99] }) });
+    assert.match(stranger.body.error, /이 여행에 없는/);
+    const viewer = await call(loadHandler('trips.js', lodgingSql(tripRow({ traveler_id: null, role: null, visibility: 'link' })), { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'lodging' }, body: lodgingBody });
+    assert.equal(viewer.statusCode, 401);
+  });
+});
+
+test('숙소 고치기: 연결된 지출 금액·결제자·나눠 내는 사람도 같이, 옮겨 온 설명은 그대로', async () => {
+  await withEnv(ENV, async () => {
+    const existing = { id: 30, trip_id: 5, expense_id: 77 };
+    const sql = lodgingSql(tripRow(), { existing, expense: { id: 77, description: '숙소2_파도가 머무는 정원' } });
+    const res = await call(loadHandler('trips.js', sql, { '@vercel/blob': blob }), {
+      method: 'PATCH', query: { id: '5', part: 'lodging', lodging: '30' }, headers: { cookie: cookie(3) },
+      body: Object.assign({}, lodgingBody, { cost: 330000, payerId: 5, guestIds: [2, 3, 4, 5] }),
+    });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(sql.calls.find((c) => c.text.startsWith('UPDATE expenses SET description')).values, ['숙소2_파도가 머무는 정원', 330000, 5, 77]);
+    assert.deepEqual(sql.calls.filter((c) => c.text.startsWith('INSERT INTO expense_splits')).map((c) => c.values[1]), [2, 3, 4, 5]);
+  });
+});
+
+test('숙소 고치기: "지출에 추가"를 끄면 연결된 지출을 지우고, 숙소를 지우면 지출도 지움', async () => {
+  await withEnv(ENV, async () => {
+    const existing = { id: 30, trip_id: 5, expense_id: 77 };
+    const sql = lodgingSql(tripRow(), { existing, expense: { id: 77, description: '숙소 · 파도가 머무는 정원' } });
+    await call(loadHandler('trips.js', sql, { '@vercel/blob': blob }), {
+      method: 'PATCH', query: { id: '5', part: 'lodging', lodging: '30' }, headers: { cookie: cookie(3) }, body: Object.assign({}, lodgingBody, { addExpense: false }),
+    });
+    assert.deepEqual(sql.calls.find((c) => c.text.startsWith('DELETE FROM expenses')).values, [77]);
+    assert.deepEqual(sql.calls.find((c) => c.text.startsWith('UPDATE lodgings SET expense_id')).values, [null, 30]);
+    const sql2 = lodgingSql(tripRow(), { existing });
+    const del = await call(loadHandler('trips.js', sql2, { '@vercel/blob': blob }), { method: 'DELETE', query: { id: '5', part: 'lodging', lodging: '30' }, headers: { cookie: cookie(3) } });
+    assert.equal(del.statusCode, 200);
+    assert.deepEqual(sql2.calls.find((c) => c.text.startsWith('DELETE FROM expenses')).values, [77, 5]);
+    assert.ok(sql2.calls.some((c) => c.text.startsWith('DELETE FROM lodgings')));
+  });
+});
+
+test('지출 API: 숙소와 연결된 지출은 정산 화면에서 고치거나 지울 수 없음', async () => {
+  const sql = createFakeSql((text) => (text.startsWith('SELECT 1 FROM lodgings WHERE expense_id') ? { rows: [{ ok: 1 }] } : undefined));
+  const res = await call(loadHandler('expenses.js', sql), { method: 'DELETE', query: { id: '77' } });
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.body.code, 'lodging_expense');
+  const res2 = await call(loadHandler('expenses.js', sql), { method: 'PATCH', query: { id: '77' }, body: { description: 'x', amount: 1, payerId: 2, participantIds: [2] } });
+  assert.equal(res2.statusCode, 409);
+});

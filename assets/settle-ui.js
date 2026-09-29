@@ -202,12 +202,14 @@
       : '';
     return '<div class="st-exp">' +
       '<div class="st-exp-main">' +
-        '<div class="st-exp-desc">' + esc(e.description) + '</div>' +
+        '<div class="st-exp-desc">' + esc(e.description) + (e.lodgingId ? ' <span class="st-lodging-tag" title="일정의 숙소에서 고쳐요">🏠 숙소</span>' : '') + '</div>' +
         '<div class="st-exp-sub">💳 ' + esc(nameOf(e.payerId)) + ' 결제 · 👥 ' + esc(who) + perName + '</div>' +
       '</div>' +
       '<div class="st-exp-amt">' + won(e.amount) +
-        '<button type="button" class="st-iconbtn" data-edit-expense="' + e.id + '" aria-label="지출 수정">✎</button>' +
-        '<button type="button" class="st-chip-x" data-del-expense="' + e.id + '" aria-label="지출 삭제">×</button>' +
+        // 숙소에서 만든 지출은 일정의 숙소에서만 고치고 지워요 (금액·나눠 내는 사람이 숙소와 같이 움직임)
+        (e.lodgingId ? '' :
+          '<button type="button" class="st-iconbtn" data-edit-expense="' + e.id + '" aria-label="지출 수정">✎</button>' +
+          '<button type="button" class="st-chip-x" data-del-expense="' + e.id + '" aria-label="지출 삭제">×</button>') +
       '</div>' +
     '</div>';
   }

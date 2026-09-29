@@ -108,3 +108,61 @@ test('lodgingNights · shortWon', () => {
   assert.equal(I.shortWon(125000), '12.5만원');
   assert.equal(I.shortWon(8000), '8,000원');
 });
+
+// ---- 숙소 ----------------------------------------------------------------------
+
+const ctx = { startDate: '2026-09-24', days: 3, travelerIds: [2, 3, 4, 5] };
+
+test('validateLodging: 기본값(1박 · 전원) · 체크인은 기간 안 · 마지막 날 밤까지', () => {
+  const ok = I.validateLodging({ name: ' 남해는, 지금 ', checkIn: '2026-09-24', cost: '170000', mapUrl: 'https://naver.me/x' }, ctx);
+  assert.deepEqual(ok.value, { name: '남해는, 지금', memo: null, address: null, checkIn: '2026-09-24', nights: 1, cost: 170000, guestIds: [2, 3, 4, 5], mapUrl: 'https://naver.me/x', linkUrl: null, addExpense: false });
+  assert.match(I.validateLodging({ name: 'a', checkIn: '2026-09-23' }, ctx).error, /기간 안/);
+  assert.match(I.validateLodging({ name: 'a', checkIn: '2026-09-27' }, ctx).error, /기간 안/);
+  assert.equal(I.validateLodging({ name: 'a', checkIn: '2026-09-25', nights: 2 }, ctx).value.nights, 2);
+  assert.match(I.validateLodging({ name: 'a', checkIn: '2026-09-25', nights: 3 }, ctx).error, /마지막 날 밤/);
+  assert.match(I.validateLodging({ name: 'a', checkIn: '2026-09-24', nights: 0 }, ctx).error, /1박 이상/);
+  assert.match(I.validateLodging({ name: '', checkIn: '2026-09-24' }, ctx).error, /숙소 이름/);
+});
+
+test('validateLodging: 비용 · 함께 묵는 사람 · 지출 추가 조건', () => {
+  assert.match(I.validateLodging({ name: 'a', checkIn: '2026-09-24', cost: '십칠만' }, ctx).error, /숫자로 입력/);
+  assert.match(I.validateLodging({ name: 'a', checkIn: '2026-09-24', guestIds: [2, 99] }, ctx).error, /이 여행에 없는/);
+  assert.deepEqual(I.validateLodging({ name: 'a', checkIn: '2026-09-24', guestIds: ['3', 3, 5] }, ctx).value.guestIds, [3, 5]);
+  assert.match(I.validateLodging({ name: 'a', checkIn: '2026-09-24', addExpense: true }, ctx).error, /비용을 입력/);
+  assert.match(I.validateLodging({ name: 'a', checkIn: '2026-09-24', addExpense: true, cost: 300000, guestIds: [] }, ctx).error, /한 명 이상/);
+  assert.match(I.validateLodging({ name: 'a', checkIn: '2026-09-24', addExpense: true, cost: 300000, payerId: 99 }, ctx).error, /결제한 사람/);
+  const v = I.validateLodging({ name: 'a', checkIn: '2026-09-24', addExpense: true, cost: 300000, payerId: '2', guestIds: [2, 4, 5] }, ctx).value;
+  assert.equal(v.addExpense, true);
+  assert.equal(v.payerId, 2);
+});
+
+test('perPersonCost · lodgingExpenseDescription', () => {
+  assert.equal(I.perPersonCost(300000, 3), 100000);
+  assert.equal(I.perPersonCost(170000, 4), 42500);
+  assert.equal(I.perPersonCost(100000, 3), 33333);
+  assert.equal(I.perPersonCost(null, 3), null);
+  assert.equal(I.perPersonCost(1000, 0), null);
+  assert.equal(I.lodgingExpenseDescription({ name: '파도가 머무는 정원', nights: 1 }), '숙소 · 파도가 머무는 정원');
+  assert.equal(I.lodgingExpenseDescription({ name: '한옥', nights: 2 }), '숙소 · 한옥 (2박)');
+});
+
+test('nightlyCoverage: 하룻밤 여러 숙소 · 겹친 사람 · 숙소 미정인 사람', () => {
+  const lodgings = [
+    { id: 1, checkIn: '2026-09-24', nights: 2, guestIds: [2, 3] },
+    { id: 2, checkIn: '2026-09-25', nights: 1, guestIds: [3, 4] },
+  ];
+  const c = I.nightlyCoverage(['2026-09-24', '2026-09-25', '2026-09-26'], lodgings, [2, 3, 4, 5]);
+  assert.deepEqual(c['2026-09-24'], { lodgingIds: [1], doubled: [], missing: [4, 5] });
+  assert.deepEqual(c['2026-09-25'], { lodgingIds: [1, 2], doubled: [3], missing: [5] });
+  assert.deepEqual(c['2026-09-26'], { lodgingIds: [], doubled: [], missing: [] }, '숙소가 없는 밤은 아직 안 정한 것으로');
+});
+
+test('parseWon: 쉼표 · 원 · 만 단위', () => {
+  assert.equal(I.parseWon('170,000원'), 170000);
+  assert.equal(I.parseWon('17만'), 170000);
+  assert.equal(I.parseWon('12.5만원'), 125000);
+  assert.equal(I.parseWon(' 300000 '), 300000);
+  assert.equal(I.parseWon(''), null);
+  assert.ok(Number.isNaN(I.parseWon('십칠만')));
+  assert.equal(I.validateLodging({ name: 'a', checkIn: '2026-09-24', cost: '30만' }, ctx).value.cost, 300000);
+});
