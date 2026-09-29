@@ -254,7 +254,7 @@
     var box = document.getElementById('nav-account');
     if (!box || !AuthUI.member) return;
     var who = AuthUI.member.traveler ? AuthUI.member.traveler.name : (AuthUI.member.user.name || '');
-    box.innerHTML = '<span class="nav-me">' + esc(who) + '</span>' +
+    box.innerHTML = '<button type="button" class="nav-me" data-auth-account aria-label="내 계정">' + esc(who) + ' ▾</button>' +
       '<button type="button" class="nav-logout" data-auth-logout>로그아웃</button>';
   }
 
@@ -277,9 +277,33 @@
     return AuthUI.member ? '<section class="m-block"><button type="button" class="m-logout" data-auth-logout>로그아웃</button></section>' : '';
   };
 
+  /** PC: 내 계정 창 (폰 "프로필" 탭과 같은 내용 — 로그인 계정 · 다른 계정 연결 · 로그아웃) */
+  var accountSheet = null;
+  function closeAccount() {
+    if (accountSheet) { accountSheet.remove(); accountSheet = null; }
+    document.body.classList.remove('tsheet-open');
+  }
+  AuthUI.openAccount = function () {
+    var m = AuthUI.member;
+    if (!m) return;
+    closeAccount();
+    accountSheet = document.createElement('div');
+    accountSheet.className = 'tsheet-scrim';
+    var who = m.traveler ? m.traveler.name : (m.user.name || '');
+    accountSheet.innerHTML = '<div class="tsheet" role="dialog" aria-modal="true" aria-label="내 계정">' +
+      '<span class="tsheet-grab" aria-hidden="true"></span><button type="button" class="tsheet-x" data-auth-close aria-label="닫기">×</button>' +
+      '<h2>' + esc(who) + '</h2><p class="tui-sub">' + esc(m.user.email || m.user.name || '') + '</p>' +
+      AuthUI.accountHtml() + AuthUI.logoutHtml() + '</div>';
+    document.body.appendChild(accountSheet);
+    document.body.classList.add('tsheet-open');
+  };
+
   document.addEventListener('click', function (e) {
-    if (e.target.closest('[data-auth-logout]')) logout();
+    if (e.target.closest('[data-auth-logout]')) { logout(); return; }
+    if (e.target.closest('[data-auth-account]')) { AuthUI.openAccount(); return; }
+    if (accountSheet && (e.target === accountSheet || e.target.closest('[data-auth-close]'))) closeAccount();
   });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && accountSheet) closeAccount(); });
 
   /** 링크 공개 여행을 참여하지 않고 볼 때(로그인 전이거나, 로그인했지만 참여 안 함): 위쪽 안내 + 참여/로그인 버튼 */
   AuthUI.enterViewer = function () {

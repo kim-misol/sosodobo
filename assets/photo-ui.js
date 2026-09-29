@@ -116,8 +116,8 @@
     return day + '일차' + (date ? ' · ' + date : '');
   }
 
+  /** 지금 보고 있는 목록 (PC · 폰 같음): 좋아요 / 모아보기의 묶음 / 모두(일차 칩으로 거르기) */
   function visiblePhotos() {
-    if (!isMobile()) return P.filterByDay(P.sortByTakenAt(state.photos), state.filter);
     var sorted = P.sortByTakenAt(state.photos);
     if (state.mview === 'liked') return P.likedBy(state.photos, state.me);
     if (state.mview === 'group' && state.album) {
@@ -127,7 +127,7 @@
       }
       return P.filterByDay(sorted, state.album.key);
     }
-    return sorted;
+    return P.filterByDay(sorted, state.filter);
   }
 
   function dayName(day) {
@@ -578,6 +578,7 @@
   }
 
   function renderTabs() {
+    els.tabs.hidden = state.mview !== 'all'; // 일차 칩은 "모두" 탭에서만
     els.tabs.innerHTML = filters().map(function (f) {
       var count = P.filterByDay(state.photos, f.key).length;
       if (f.key === 'etc' && count === 0) return '';
@@ -596,26 +597,11 @@
     return out.length ? '<span class="ph-badges">' + out.join('') + '</span>' : '';
   }
 
+  /** 사진 목록 그리기 (PC · 폰 같은 화면: 위쪽 탭 · 모두 · 모아보기 · 좋아요) */
   function renderGrid() {
-    if (isMobile()) { renderMobile(); return; }
-    var list = visiblePhotos();
-    if (state.loading && !state.photos.length) {
-      els.grid.innerHTML = '';
-      return;
-    }
-    if (!list.length) {
-      els.grid.innerHTML = '<p class="ph-empty">' + (state.photos.length
-        ? '이 일차에 올라온 사진이 아직 없어요.'
-        : '아직 올라온 사진이 없어요. 첫 사진을 올려 주세요! 📷') + '</p>';
-      return;
-    }
-    els.grid.innerHTML = list.map(function (p) {
-      var alt = (p.caption || '여행 사진') + ' — ' + nameOf(p.uploaderId);
-      return '<button type="button" class="ph-cell" data-id="' + p.id + '">' +
-        '<img src="' + esc(p.thumbUrl) + '" alt="' + esc(alt) + '" loading="lazy">' +
-        cellBadges(p) + '</button>';
-    }).join('');
+    renderMobile();
   }
+
 
   function render() {
     if (state.loading && !state.photos.length) showStatus('사진을 불러오는 중…', 'loading');
@@ -629,7 +615,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // 렌더링: 모바일 사진첩 (위쪽 탭 · 모두 · 모아보기 · 좋아요)
+  // 렌더링: 사진첩 (위쪽 탭 · 모두 · 모아보기 · 좋아요) — PC · 폰 공통
   // ---------------------------------------------------------------------------
   var ICONS = {
     all: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
@@ -667,7 +653,7 @@
     if (state.loading && !state.photos.length) {
       html = '';
     } else if (!state.photos.length) {
-      html = '<p class="ph-empty">아직 올라온 사진이 없어요. 가운데 📷 버튼으로 첫 사진을 올려 주세요!</p>';
+      html = '<p class="ph-empty">아직 올라온 사진이 없어요. ' + (isMobile() ? '가운데 📷 버튼' : '"＋ 올리기"') + '로 첫 사진을 올려 주세요!</p>';
     } else if (state.mview === 'liked') {
       html = mobileLikedHtml();
     } else if (state.mview === 'group') {
@@ -682,8 +668,11 @@
     var videos = state.photos.filter(function (p) { return p.mediaType === 'video'; }).length;
     var out = '<div class="ph-m-head"><span>사진 ' + (state.photos.length - videos) + ' · 영상 ' + videos + '</span>' +
       '<button type="button" class="ph-m-link" data-m-action="reel">🎬 슬라이드 영상</button></div>';
-    P.groupByDay(state.photos).forEach(function (g) {
-      if (!g.photos.length) return;
+    var groups = P.groupByDay(state.photos).filter(function (g) {
+      return g.photos.length && (state.filter === 'all' || String(g.day) === String(state.filter));
+    });
+    if (!groups.length) out += '<p class="ph-empty">이 일차에 올라온 사진이 아직 없어요.</p>';
+    groups.forEach(function (g) {
       out += '<h3 class="ph-m-sep">' + dayHeading(g.day, g.photos.length) + '</h3>' +
         '<div class="ph-m-grid">' + g.photos.map(cellHtml).join('') + '</div>';
     });
@@ -738,7 +727,7 @@
 
   function mobileLikedHtml() {
     if (!Number.isInteger(state.me)) {
-      return '<p class="ph-empty">내 좋아요를 보려면 <b>프로필</b> 탭에서 "나는 누구?"를 먼저 골라 주세요.</p>';
+      return '<p class="ph-empty">내 좋아요를 보려면 ' + (isMobile() ? '<b>프로필</b> 탭에서' : '위에서') + ' "나는 누구?"를 먼저 골라 주세요.</p>';
     }
     var list = P.likedBy(state.photos, state.me);
     if (!list.length) {

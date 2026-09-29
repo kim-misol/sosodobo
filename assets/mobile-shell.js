@@ -99,7 +99,11 @@
   // ---------------------------------------------------------------------------
   // 사람 탭
   // ---------------------------------------------------------------------------
-  function renderPeople() {
+  /**
+   * 함께 가는 사람 목록 (사진 수 · 결제 금액 · 관리자 · 추가/빼기).
+   * 폰의 "사람" 탭과 PC 의 "여행자" 칸이 같은 내용을 씀 — idPrefix 로 입력칸 id 를 나눔.
+   */
+  function peopleHtml(idPrefix, compact) {
     var list = travelers();
     var me = photoState().me;
     var s = settleState();
@@ -120,15 +124,30 @@
           ? '<button type="button" class="m-textbtn" data-m-remove="' + t.id + '" aria-label="' + esc(t.name) + ' 여행에서 빼기">빼기</button>' : '') + '</div>';
     }).join('') : '<p class="m-empty">' + (s.loading ? '불러오는 중…' : '아직 등록된 사람이 없어요. 아래에서 이름을 추가해 주세요.') + '</p>';
 
-    els.people.innerHTML =
-      '<section class="m-block"><div class="m-block-head"><h2>함께 가는 사람 <span class="m-muted">' + list.length + '명</span></h2></div>' +
-      '<div>' + rows + '</div>' +
-      (manage ? '<form class="m-add" data-m-add autocomplete="off"><label class="m-sr" for="m-add-name">이름</label>' +
-        '<input id="m-add-name" name="name" maxlength="40" placeholder="이름 추가 (예: 수진)" required>' +
-        '<button type="submit">추가</button></form>' : '<p class="m-note" style="margin:8px 0 0">사람 추가·빼기는 여행 관리자만 할 수 있어요.</p>') + '</section>' +
-      '<section class="m-block m-invite"><span class="m-invite-ico" aria-hidden="true">🔗</span><div><b>초대 링크로 부르기</b>' +
-      '<span>링크를 받은 사람이 로그인하면 바로 합류 · 준비 중</span></div></section>' +
-      '<p class="m-note">계정이 없어도 이름만으로 추가할 수 있어요. 지출 기록에 들어 있는 사람은 정산이 달라지기 때문에 뺄 수 없어요.</p>';
+    var addForm = manage ? '<form class="m-add" data-m-add autocomplete="off"><label class="m-sr" for="' + idPrefix + '-add-name">이름</label>' +
+        '<input id="' + idPrefix + '-add-name" name="name" maxlength="40" placeholder="이름 추가 (예: 수진)" required>' +
+        '<button type="submit">추가</button></form>' : '<p class="m-note" style="margin:8px 0 0">사람 추가·빼기는 여행 관리자만 할 수 있어요.</p>';
+    var invite = '<div class="m-invite"><span class="m-invite-ico" aria-hidden="true">🔗</span><div><b>초대 링크로 부르기</b>' +
+      '<span>링크를 받은 사람이 로그인하면 바로 합류 · 준비 중</span></div></div>';
+    var note = '<p class="m-note">계정이 없어도 이름만으로 추가할 수 있어요. 지출 기록에 들어 있는 사람은 정산이 달라지기 때문에 뺄 수 없어요.</p>';
+    if (compact) {
+      return '<div class="pc-people-list">' + rows + '</div>' + addForm + '<div class="pc-people-foot">' + invite + note + '</div>';
+    }
+    return '<section class="m-block"><div class="m-block-head"><h2>함께 가는 사람 <span class="m-muted">' + list.length + '명</span></h2></div>' +
+      '<div>' + rows + '</div>' + addForm + '</section>' +
+      '<section class="m-block">' + invite + '</section>' + note;
+  }
+
+  function renderPeople() {
+    els.people.innerHTML = peopleHtml('m', false);
+  }
+
+  /** PC: 정산 칸의 여행자 목록도 같은 내용으로 (입력 중이면 그대로 둠) */
+  function renderPcPeople() {
+    if (!els.pcPeople) return;
+    var active = document.activeElement;
+    if (active && els.pcPeople.contains(active) && active.value) return;
+    els.pcPeople.innerHTML = peopleHtml('pc', true);
   }
 
   async function addPerson(form) {
@@ -205,14 +224,16 @@
       var b = e.target.closest('[data-m-tab]');
       if (b) setTab(b.getAttribute('data-m-tab'));
     });
-    els.people.addEventListener('submit', function (e) {
-      if (!e.target.matches('[data-m-add]')) return;
-      e.preventDefault();
-      addPerson(e.target);
-    });
-    els.people.addEventListener('click', function (e) {
-      var b = e.target.closest('[data-m-remove]');
-      if (b) removePerson(Number(b.getAttribute('data-m-remove')));
+    [els.people, els.pcPeople].filter(Boolean).forEach(function (box) {
+      box.addEventListener('submit', function (e) {
+        if (!e.target.matches('[data-m-add]')) return;
+        e.preventDefault();
+        addPerson(e.target);
+      });
+      box.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-m-remove]');
+        if (b) removePerson(Number(b.getAttribute('data-m-remove')));
+      });
     });
     els.profile.addEventListener('change', function (e) {
       if (e.target.id !== 'm-me' || !window.PhotoUI) return;
@@ -227,6 +248,7 @@
       var typing = active && active.matches && active.matches('input, select, textarea');
       if (currentTab() === 'people' && !(typing && els.people.contains(active))) renderPeople();
       if (currentTab() === 'profile' && !(typing && els.profile.contains(active))) renderProfile();
+      renderPcPeople();
     }
     if (window.PhotoUI && window.PhotoUI.onChange) window.PhotoUI.onChange(refresh);
     if (window.SettleUI && window.SettleUI.onChange) window.SettleUI.onChange(refresh);
@@ -249,6 +271,7 @@
     els.people = $('#m-people');
     els.profile = $('#m-profile');
     els.status = $('#m-trip-status');
+    els.pcPeople = $('#pc-people');
     if (!els.top || !els.tabbar || !SC) return;
     bind();
     setTab(currentTab(), { keepScroll: true });
