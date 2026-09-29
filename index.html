@@ -378,9 +378,12 @@
     font-size:12px;
     padding:30px 20px 40px;
   }
+  /* 사진이 없는 숙소는 왼쪽 여백을 따로 (사진이 있으면 사진 옆 간격이 여백 역할) */
+  .lodge-card.no-img .lodge-info{padding-left:16px;}
   @media (max-width:420px){
     .lodge-card{flex-direction:column;}
     .lodge-card img{width:100%;height:150px;}
+    .lodge-info{padding:14px 16px;} /* 사진이 위로 올라가면 글 양옆 여백 */
   }
   .carousel{
     position:relative;
