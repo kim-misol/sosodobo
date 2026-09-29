@@ -4,8 +4,7 @@
  * - 주소 ?trip=<id> → 지난번에 본 여행 → 가장 가까운 다가오는 여행 → 가장 최근 지난 여행 순으로 고름
  * - 여행 정보를 불러와 다른 화면이 쓰는 값(TripPlaces, PhotoCore.LIMITS.tripDays, 제목)을 맞추고
  *   api/* 요청에 ?trip= 를 자동으로 붙임 (api/auth, api/trips 제외)
- * - 남해 바래길(옛 페이지)만 index.html 에 적힌 일정을 보여 주고, 다른 여행은 여행 정보로 카드를 그림
- *   (날짜별 일정 편집은 다음 단계)
+ * - 위쪽 여행 카드: 남해 바래길은 index.html 에 적힌 그대로, 다른 여행은 여행 정보로 그림 (날짜별 일정은 itinerary-ui.js)
  * - 준비가 끝나면 TripContext.ready 가 풀리고 'sosodobo:trip' 이벤트를 보냄
  *
  * 필요 전역: AuthUI(있으면), TripCore, TripPlaces, PhotoCore(있으면)
@@ -93,17 +92,6 @@
         '<div class="summary"><span>📍 ' + esc(t.region) + '</span><span>🗓 ' + t.days + '일' + (t.days > 1 ? ' (' + (t.days - 1) + '박)' : '') + '</span>' +
         (t.memberCount ? '<span>👥 ' + t.memberCount + '명</span>' : '') + '</div>';
       if (status) head.appendChild(status);
-    }
-    var box = document.getElementById('trip-days');
-    if (box) {
-      var cards = '';
-      for (var d = 1; d <= t.days; d++) {
-        var date = new Date(Date.parse(t.startDate + 'T00:00:00Z') + (d - 1) * 86400000);
-        var label = (date.getUTCMonth() + 1) + '/' + date.getUTCDate() + ' (' + '일월화수목금토'[date.getUTCDay()] + ')';
-        cards += '<article class="trip-day"><span class="day-label">DAY ' + d + '</span><b>' + label + '</b>' +
-          '<p>아직 일정이 비어 있어요.</p></article>';
-      }
-      box.innerHTML = cards + '<p class="trip-days-note">코스 · 이동 · 주차 · 숙소 입력은 곧 추가돼요.</p>';
     }
   }
 

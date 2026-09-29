@@ -136,6 +136,53 @@ async function ensureSchema() {
       await sql`CREATE INDEX IF NOT EXISTS expenses_trip_idx ON expenses (trip_id)`;
       await sql`CREATE INDEX IF NOT EXISTS notes_trip_idx ON notes (trip_id)`;
       await sql`CREATE INDEX IF NOT EXISTS photos_trip_idx ON photos (trip_id)`;
+
+      // 날짜별 일정: 날짜 정보 + 코스·이동·주차 항목 + 미리보기 사진, 숙소(여러 밤·여러 곳)와 묵는 사람
+      await sql`CREATE TABLE IF NOT EXISTS trip_days (
+        id SERIAL PRIMARY KEY,
+        trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+        day_no SMALLINT NOT NULL,
+        title TEXT,
+        summary TEXT,
+        plan_mode TEXT NOT NULL DEFAULT 'course' CHECK (plan_mode IN ('course', 'free')),
+        free_note TEXT,
+        UNIQUE (trip_id, day_no)
+      )`;
+      await sql`CREATE TABLE IF NOT EXISTS day_items (
+        id SERIAL PRIMARY KEY,
+        day_id INTEGER NOT NULL REFERENCES trip_days(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('course', 'move', 'parking')),
+        position INTEGER NOT NULL DEFAULT 0,
+        name TEXT, subtitle TEXT, from_place TEXT, to_place TEXT,
+        distance_km NUMERIC(6,1), duration_text TEXT, difficulty SMALLINT,
+        mode TEXT, timing TEXT,
+        map_url TEXT, link_url TEXT, image_url TEXT, memo TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS day_items_day_idx ON day_items (day_id, position)`;
+      await sql`CREATE TABLE IF NOT EXISTS day_photos (
+        id SERIAL PRIMARY KEY,
+        day_id INTEGER NOT NULL REFERENCES trip_days(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL DEFAULT 0,
+        url TEXT NOT NULL, thumb_url TEXT, caption TEXT, width INTEGER, height INTEGER
+      )`;
+      await sql`CREATE TABLE IF NOT EXISTS lodgings (
+        id SERIAL PRIMARY KEY,
+        trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        check_in DATE NOT NULL,
+        nights SMALLINT NOT NULL DEFAULT 1,
+        cost BIGINT,
+        memo TEXT, address TEXT,
+        map_url TEXT, map_provider TEXT, link_url TEXT, image_url TEXT,
+        expense_id INTEGER REFERENCES expenses(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`;
+      await sql`CREATE TABLE IF NOT EXISTS lodging_guests (
+        lodging_id INTEGER NOT NULL REFERENCES lodgings(id) ON DELETE CASCADE,
+        traveler_id INTEGER NOT NULL REFERENCES travelers(id) ON DELETE CASCADE,
+        PRIMARY KEY (lodging_id, traveler_id)
+      )`;
       // 기존 준비물 항목은 최초 1회만 채워 넣습니다.
       // (사용자가 나중에 전부 지워도 다시 생기지 않도록 플래그로 제어)
       const seeded = await sql`SELECT 1 FROM app_meta WHERE key = 'notes_seeded'`;
@@ -153,6 +200,7 @@ async function ensureSchema() {
       }
       await backfillPhotoDays();
       await migrateLegacyTrip();
+      await seedNamhaeItinerary();
     })().catch((err) => {
       // 실패하면 다음 요청에서 다시 시도할 수 있게 캐시를 비웁니다.
       schemaReady = null;
@@ -229,6 +277,67 @@ async function migrateLegacyTrip() {
       WHERE t.trip_id = ${tripId} ORDER BY u.created_at ASC, u.id ASC LIMIT 1
     )`;
   await sql`INSERT INTO app_meta (key, value) VALUES ('legacy_trip_id', ${String(tripId)}) ON CONFLICT (key) DO NOTHING`;
+}
+
+/**
+ * 예전 index.html 에 적혀 있던 남해 일정 · 숙소 · 미리보기 사진을 남해 여행에 한 번 넣습니다.
+ * 숙소비는 이미 지출 기록(숙소1_…, 숙소2_…)에 있으니 새로 만들지 않고 연결하고,
+ * 묵은 사람은 그 지출을 나눠 낸 사람으로 (지출이 없으면 여행 전원).
+ */
+async function seedNamhaeItinerary() {
+  const done = await sql`SELECT 1 FROM app_meta WHERE key = 'namhae_itinerary_seeded'`;
+  if (done.rowCount > 0) return;
+  const trip = await sql`SELECT id FROM trips WHERE legacy_key = 'namhae'`;
+  if (!trip.rowCount) return;
+  const tripId = trip.rows[0].id;
+  const seed = require('./_namhae-seed');
+  const { detectMapProvider } = require('../assets/itinerary-core.js');
+  const existing = await sql`SELECT COUNT(*) AS n FROM trip_days WHERE trip_id = ${tripId}`;
+  if (Number(existing.rows[0].n) === 0) {
+    for (const d of seed.days) {
+      const day = await sql`
+        INSERT INTO trip_days (trip_id, day_no, title, summary, plan_mode, free_note)
+        VALUES (${tripId}, ${d.dayNo}, ${d.title || null}, ${d.summary || null}, ${d.planMode || 'course'}, ${d.freeNote || null})
+        RETURNING id`;
+      const dayId = day.rows[0].id;
+      let pos = 0;
+      for (const it of d.items) {
+        pos += 1;
+        await sql`
+          INSERT INTO day_items (day_id, kind, position, name, subtitle, from_place, to_place, distance_km, duration_text, difficulty,
+                                 mode, timing, map_url, link_url, image_url, memo)
+          VALUES (${dayId}, ${it.kind}, ${pos}, ${it.name || null}, ${it.subtitle || null}, ${it.fromPlace || null}, ${it.toPlace || null},
+                  ${it.distanceKm === undefined ? null : it.distanceKm}, ${it.durationText || null}, ${it.difficulty || null},
+                  ${it.mode || null}, ${it.timing || null}, ${it.mapUrl || null}, ${it.linkUrl || null}, ${it.imageUrl || null}, ${it.memo || null})`;
+      }
+      let ppos = 0;
+      for (const ph of d.photos) {
+        ppos += 1;
+        await sql`INSERT INTO day_photos (day_id, position, url, thumb_url, caption) VALUES (${dayId}, ${ppos}, ${ph.url}, ${ph.url}, ${ph.caption || null})`;
+      }
+    }
+  }
+  const lodgingCount = await sql`SELECT COUNT(*) AS n FROM lodgings WHERE trip_id = ${tripId}`;
+  if (Number(lodgingCount.rows[0].n) === 0) {
+    for (const l of seed.lodgings) {
+      const ex = await sql`
+        SELECT id FROM expenses WHERE trip_id = ${tripId} AND description LIKE ${l.expensePrefix + '%'} ORDER BY id LIMIT 1`;
+      const expenseId = ex.rows.length ? ex.rows[0].id : null;
+      const created = await sql`
+        INSERT INTO lodgings (trip_id, name, check_in, nights, cost, memo, map_url, map_provider, link_url, image_url, expense_id)
+        VALUES (${tripId}, ${l.name}, ${l.checkIn}, ${l.nights}, ${l.cost}, ${l.memo || null}, ${l.mapUrl || null},
+                ${detectMapProvider(l.mapUrl)}, ${l.linkUrl || null}, ${l.imageUrl || null}, ${expenseId})
+        RETURNING id`;
+      const lodgingId = created.rows[0].id;
+      const guests = expenseId
+        ? await sql`SELECT traveler_id AS id FROM expense_splits WHERE expense_id = ${expenseId}`
+        : await sql`SELECT id FROM travelers WHERE trip_id = ${tripId}`;
+      for (const g of guests.rows) {
+        await sql`INSERT INTO lodging_guests (lodging_id, traveler_id) VALUES (${lodgingId}, ${g.id}) ON CONFLICT DO NOTHING`;
+      }
+    }
+  }
+  await sql`INSERT INTO app_meta (key, value) VALUES ('namhae_itinerary_seeded', 'true') ON CONFLICT (key) DO NOTHING`;
 }
 
 // 공통 응답 헬퍼: JSON + 간단한 에러 처리.

@@ -104,12 +104,12 @@
     var edit = !!trip;
     var vis = t.visibility || 'private';
     return '<form class="tui-form" data-trip-form="' + (edit ? 'edit' : 'create') + '"' + (edit ? ' data-id="' + t.id + '"' : '') + ' autocomplete="off" novalidate>' +
-      '<label>여행 이름 <em>*</em><input name="title" maxlength="40" required value="' + esc(t.title) + '" placeholder="예: 제주 올레 7코스"></label>' +
-      '<div class="tui-two"><label>시작일 <em>*</em><input type="date" name="startDate" required value="' + esc(t.startDate) + '"></label>' +
-      '<label>마지막 날 <em>*</em><input type="date" name="endDate" required value="' + esc(t.endDate) + '"></label></div>' +
-      '<label>지역 <em>*</em><input name="region" maxlength="40" required value="' + esc(t.region) + '" placeholder="예: 제주 서귀포"></label>' +
-      '<label>한줄 설명 <span class="tui-opt">(선택)</span><input name="summary" maxlength="80" value="' + esc(t.summary) + '" placeholder="예: 바다 따라 천천히 걷기"></label>' +
-      (!edit && !authOn() ? '<label>내 이름 <span class="tui-opt">(선택)</span><input name="myName" maxlength="40" placeholder="이 여행에서 부를 이름"></label>' : '') +
+      '<label><span>여행 이름 <em>*</em></span><input name="title" maxlength="40" required value="' + esc(t.title) + '" placeholder="예: 제주 올레 7코스"></label>' +
+      '<div class="tui-two"><label><span>시작일 <em>*</em></span><input type="date" name="startDate" required value="' + esc(t.startDate) + '"></label>' +
+      '<label><span>마지막 날 <em>*</em></span><input type="date" name="endDate" required value="' + esc(t.endDate) + '"></label></div>' +
+      '<label><span>지역 <em>*</em></span><input name="region" maxlength="40" required value="' + esc(t.region) + '" placeholder="예: 제주 서귀포"></label>' +
+      '<label><span>한줄 설명 <span class="tui-opt">(선택)</span></span><input name="summary" maxlength="80" value="' + esc(t.summary) + '" placeholder="예: 바다 따라 천천히 걷기"></label>' +
+      (!edit && !authOn() ? '<label><span>내 이름 <span class="tui-opt">(선택)</span></span><input name="myName" maxlength="40" placeholder="이 여행에서 부를 이름"></label>' : '') +
       '<fieldset class="tui-radios"><legend>공개 설정</legend>' +
       '<label><input type="radio" name="visibility" value="private"' + (vis === 'private' ? ' checked' : '') + '><span><b>비공개</b>참여한 사람만 볼 수 있어요.</span></label>' +
       '<label><input type="radio" name="visibility" value="link"' + (vis === 'link' ? ' checked' : '') + '><span><b>링크 공개</b>링크가 있으면 누구나 일정·숙소·사진을 볼 수 있어요. 지출·정산·준비물은 참여자만.</span></label>' +
@@ -137,8 +137,13 @@
     var check = Core().validateTrip(body, { partial: false });
     if (check.error) { err.textContent = check.error; err.hidden = false; return; }
     err.hidden = true;
-    btn.disabled = true;
     var edit = form.getAttribute('data-trip-form') === 'edit';
+    // 기간을 줄여 일정이 적힌 날이 사라지면 먼저 물어봄
+    if (edit && window.ItineraryUI && TC().trip && String(TC().trip.id) === form.getAttribute('data-id')) {
+      var lost = window.ItineraryUI.daysWithContentBeyond(Core().tripDays(body.startDate, body.endDate));
+      if (lost.length && !confirm('기간을 줄이면 DAY ' + lost.join(', DAY ') + ' 에 적은 일정이 지워져요. 계속할까요?')) return;
+    }
+    btn.disabled = true;
     var req = edit ? api('PATCH', 'api/trips?id=' + form.getAttribute('data-id'), body) : api('POST', 'api/trips', body);
     req.then(function (d) {
       if (edit && d.photosWithoutDay) alert('기간이 줄어서 사진 ' + d.photosWithoutDay + '장이 "일차 없음"이 됐어요.');

@@ -6,10 +6,18 @@
 //   DELETE ?id=5                 → 삭제 (관리자) — 사람·지출·준비물·사진 모두 지워지고 사진 파일도 정리
 //   POST   ?id=5&part=join-code  → 참여 코드 새로 만들기 (관리자)
 //   POST   ?id=5&part=leave      → 이 여행에서 나가기 (관리자는 불가 — 삭제하거나 나중에 관리자 넘기기)
+//
+//   날짜별 일정 (보기: 참여자 · 링크 공개면 누구나 / 고치기: 관리자, "참여자 모두 수정"이 켜져 있으면 참여자도)
+//   GET    ?id=5&part=itinerary               → { days: [...], lodgings: [...], canEdit }
+//   PATCH  ?id=5&part=day&day=2 { title?, summary?, planMode?, freeNote? }
+//   POST   ?id=5&part=item&day=2 { kind: 'course'|'move'|'parking', ... } → 그날 맨 뒤에 추가
+//   PATCH  ?id=5&part=item&item=9 { ... }  ·  DELETE ?id=5&part=item&item=9
+//   POST   ?id=5&part=item-move&item=9 { dir: -1|1 } → 같은 종류 안에서 한 칸 위/아래
 const { del } = require('@vercel/blob');
 const { sql, ensureSchema, sendError, randomJoinCode } = require('./_db');
 const A = require('./_auth');
 const TripCore = require('../assets/trip-core.js');
+const I = require('../assets/itinerary-core.js');
 const { findBlobToken } = require('./_blob-token');
 
 function readBody(req) {
@@ -41,6 +49,156 @@ async function myRow(tripId, uid) {
     FROM trips t LEFT JOIN travelers tr ON tr.trip_id = t.id AND tr.user_id = ${uid}
     WHERE t.id = ${tripId}`;
   return r.rows[0] || null;
+}
+
+function mapItem(r) {
+  return {
+    id: r.id, kind: r.kind, position: r.position, name: r.name, subtitle: r.subtitle,
+    fromPlace: r.from_place, toPlace: r.to_place,
+    distanceKm: r.distance_km === null || r.distance_km === undefined ? null : Number(r.distance_km),
+    durationText: r.duration_text, difficulty: r.difficulty, mode: r.mode, timing: r.timing,
+    mapUrl: r.map_url, mapProvider: I.detectMapProvider(r.map_url), linkUrl: r.link_url, imageUrl: r.image_url, memo: r.memo,
+  };
+}
+
+async function loadItinerary(trip) {
+  const days = await sql`
+    SELECT id, day_no, title, summary, plan_mode, free_note FROM trip_days WHERE trip_id = ${trip.id} ORDER BY day_no`;
+  const items = await sql`
+    SELECT i.* FROM day_items i JOIN trip_days d ON d.id = i.day_id WHERE d.trip_id = ${trip.id} ORDER BY i.position, i.id`;
+  const photos = await sql`
+    SELECT p.id, p.day_id, p.position, p.url, p.thumb_url, p.caption, p.width, p.height
+    FROM day_photos p JOIN trip_days d ON d.id = p.day_id WHERE d.trip_id = ${trip.id} ORDER BY p.position, p.id`;
+  const lodgings = await sql`
+    SELECT l.id, l.name, to_char(l.check_in, 'YYYY-MM-DD') AS check_in, l.nights, l.cost, l.memo, l.address,
+           l.map_url, l.map_provider, l.link_url, l.image_url, l.expense_id,
+           COALESCE((SELECT ARRAY_AGG(g.traveler_id ORDER BY g.traveler_id) FROM lodging_guests g WHERE g.lodging_id = l.id), '{}') AS guest_ids
+    FROM lodgings l WHERE l.trip_id = ${trip.id} ORDER BY l.check_in, l.id`;
+  const rows = days.rows.map((d) => ({
+    id: d.id, dayNo: d.day_no, title: d.title, summary: d.summary, planMode: d.plan_mode, freeNote: d.free_note,
+    items: items.rows.filter((i) => i.day_id === d.id).map(mapItem),
+    photos: photos.rows.filter((p) => p.day_id === d.id).map((p) => ({
+      id: p.id, url: p.url, thumbUrl: p.thumb_url || p.url, caption: p.caption, width: p.width, height: p.height,
+    })),
+  }));
+  return {
+    days: I.buildDays(trip.startDate, trip.days, rows),
+    lodgings: lodgings.rows.map((l) => ({
+      id: l.id, name: l.name, checkIn: l.check_in, nights: l.nights, cost: l.cost === null ? null : Number(l.cost),
+      memo: l.memo, address: l.address, mapUrl: l.map_url, mapProvider: l.map_provider || I.detectMapProvider(l.map_url),
+      linkUrl: l.link_url, imageUrl: l.image_url, expenseId: l.expense_id, guestIds: (l.guest_ids || []).map(Number),
+    })),
+  };
+}
+
+/** 그 날짜 행을 (없으면 만들어) 돌려줌 */
+async function ensureDay(tripId, dayNo) {
+  await sql`INSERT INTO trip_days (trip_id, day_no) VALUES (${tripId}, ${dayNo}) ON CONFLICT (trip_id, day_no) DO NOTHING`;
+  const r = await sql`SELECT id FROM trip_days WHERE trip_id = ${tripId} AND day_no = ${dayNo}`;
+  return r.rows[0].id;
+}
+
+/** 이 여행의 항목인지 확인하고 행을 돌려줌 */
+async function findItem(tripId, itemId) {
+  const r = await sql`
+    SELECT i.* FROM day_items i JOIN trip_days d ON d.id = i.day_id WHERE i.id = ${itemId} AND d.trip_id = ${tripId}`;
+  return r.rows[0] || null;
+}
+
+const ITEM_COLUMNS = {
+  name: 'name', subtitle: 'subtitle', fromPlace: 'from_place', toPlace: 'to_place', distanceKm: 'distance_km',
+  durationText: 'duration_text', difficulty: 'difficulty', mode: 'mode', timing: 'timing',
+  mapUrl: 'map_url', linkUrl: 'link_url', memo: 'memo',
+};
+
+async function handleItinerary(req, res, row, ctx) {
+  const part = String(req.query.part || '');
+  const trip = A.tripInfo(row);
+
+  if (req.method === 'GET' && part === 'itinerary') {
+    if (!ctx.member && row.visibility !== 'link') {
+      return res.status(ctx.on && !ctx.uid ? 401 : 403).json(ctx.on && !ctx.uid
+        ? { error: '로그인이 필요해요.', code: 'login_required' }
+        : { error: '이 여행에 참여한 뒤에 볼 수 있어요.', code: 'join_required' });
+    }
+    const it = await loadItinerary(trip);
+    return res.status(200).json(Object.assign(it, { canEdit: ctx.canEdit }));
+  }
+
+  if (ctx.on && !ctx.uid) return res.status(401).json({ error: '로그인이 필요해요.', code: 'login_required' });
+  if (!ctx.canEdit) {
+    return res.status(403).json({ error: ctx.member ? '관리자만 일정을 고칠 수 있게 설정돼 있어요.' : '이 여행에 참여한 뒤에 고칠 수 있어요.', code: 'cannot_edit' });
+  }
+  const b = readBody(req);
+
+  if (part === 'day' && req.method === 'PATCH') {
+    const dayNo = parseInt(req.query.day, 10);
+    if (!(dayNo >= 1 && dayNo <= trip.days)) return res.status(400).json({ error: '날짜가 여행 기간 밖이에요.' });
+    const parsed = I.validateDay(b);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const dayId = await ensureDay(trip.id, dayNo);
+    const v = parsed.value;
+    const cur = (await sql`SELECT title, summary, plan_mode, free_note FROM trip_days WHERE id = ${dayId}`).rows[0];
+    await sql`
+      UPDATE trip_days SET
+        title = ${'title' in v ? v.title : cur.title}, summary = ${'summary' in v ? v.summary : cur.summary},
+        plan_mode = ${'planMode' in v ? v.planMode : cur.plan_mode}, free_note = ${'freeNote' in v ? v.freeNote : cur.free_note}
+      WHERE id = ${dayId}`;
+    return res.status(200).json(await loadItinerary(trip));
+  }
+
+  if (part === 'item' && req.method === 'POST') {
+    const dayNo = parseInt(req.query.day, 10);
+    if (!(dayNo >= 1 && dayNo <= trip.days)) return res.status(400).json({ error: '날짜가 여행 기간 밖이에요.' });
+    const parsed = I.validateItem(b.kind, b);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const dayId = await ensureDay(trip.id, dayNo);
+    const count = await sql`SELECT COUNT(*) AS n, COALESCE(MAX(position), 0) AS maxpos FROM day_items WHERE day_id = ${dayId}`;
+    if (Number(count.rows[0].n) >= I.LIMITS.itemsPerDay) return res.status(400).json({ error: '하루에 항목은 ' + I.LIMITS.itemsPerDay + '개까지 넣을 수 있어요.' });
+    const v = parsed.value;
+    await sql`
+      INSERT INTO day_items (day_id, kind, position, name, subtitle, from_place, to_place, distance_km, duration_text, difficulty,
+                             mode, timing, map_url, link_url, memo)
+      VALUES (${dayId}, ${b.kind}, ${Number(count.rows[0].maxpos) + 1}, ${v.name || null}, ${v.subtitle || null}, ${v.fromPlace || null},
+              ${v.toPlace || null}, ${v.distanceKm === undefined ? null : v.distanceKm}, ${v.durationText || null},
+              ${v.difficulty === undefined ? null : v.difficulty}, ${v.mode || null}, ${v.timing || null},
+              ${v.mapUrl || null}, ${v.linkUrl || null}, ${v.memo || null})`;
+    return res.status(201).json(await loadItinerary(trip));
+  }
+
+  const itemId = parseInt(req.query.item, 10);
+  if ((part === 'item' || part === 'item-move') && Number.isInteger(itemId)) {
+    const item = await findItem(trip.id, itemId);
+    if (!item) return res.status(404).json({ error: '이 여행에 없는 항목이에요.' });
+
+    if (part === 'item' && req.method === 'DELETE') {
+      await sql`DELETE FROM day_items WHERE id = ${itemId}`;
+      return res.status(200).json(await loadItinerary(trip));
+    }
+    if (part === 'item' && req.method === 'PATCH') {
+      const parsed = I.validateItem(item.kind, b, { partial: true });
+      if (parsed.error) return res.status(400).json({ error: parsed.error });
+      const merged = mapItem(item);
+      Object.assign(merged, parsed.value);
+      // 이동은 출발·도착·메모 중 하나는 남아 있어야
+      if (item.kind === 'move' && !merged.fromPlace && !merged.toPlace && !merged.memo) {
+        return res.status(400).json({ error: '출발 · 도착 · 메모 중 하나는 적어 주세요.' });
+      }
+      await sql`
+        UPDATE day_items SET name = ${merged.name}, subtitle = ${merged.subtitle}, from_place = ${merged.fromPlace}, to_place = ${merged.toPlace},
+          distance_km = ${merged.distanceKm}, duration_text = ${merged.durationText}, difficulty = ${merged.difficulty},
+          mode = ${merged.mode}, timing = ${merged.timing}, map_url = ${merged.mapUrl}, link_url = ${merged.linkUrl}, memo = ${merged.memo}
+        WHERE id = ${itemId}`;
+      return res.status(200).json(await loadItinerary(trip));
+    }
+    if (part === 'item-move' && req.method === 'POST') {
+      const siblings = await sql`SELECT id, kind, timing, position FROM day_items WHERE day_id = ${item.day_id}`;
+      const changes = I.moveItem(siblings.rows, itemId, Number(b.dir));
+      for (const c of changes) await sql`UPDATE day_items SET position = ${c.position} WHERE id = ${c.id}`;
+      return res.status(200).json(await loadItinerary(trip));
+    }
+  }
+  return res.status(400).json({ error: '알 수 없는 요청이에요.' });
 }
 
 async function handler(req, res) {
@@ -109,6 +267,11 @@ async function handler(req, res) {
     const member = !on || !!row.traveler_id;
     const admin = !on || row.role === 'admin';
 
+    // ---- 날짜별 일정 ----
+    if (['itinerary', 'day', 'item', 'item-move'].indexOf(part) >= 0) {
+      return handleItinerary(req, res, row, { on, uid, member, admin, canEdit: member && (admin || row.members_can_edit) });
+    }
+
     // ---- 상세 ----
     if (req.method === 'GET') {
       if (!member && row.visibility !== 'link') {
@@ -158,6 +321,7 @@ async function handler(req, res) {
       // 기간이 줄면 범위 밖 일차가 된 사진은 "일차 없음"으로
       const days = TripCore.tripDays(v.startDate, v.endDate);
       const cleared = await sql`UPDATE photos SET day = NULL WHERE trip_id = ${id} AND day > ${days} RETURNING id`;
+      await sql`DELETE FROM trip_days WHERE trip_id = ${id} AND day_no > ${days}`; // 줄어든 날짜의 일정 (화면에서 미리 경고)
       const after = await myRow(id, uid);
       return res.status(200).json({ trip: shape(after, { joinCode: after.join_code }), photosWithoutDay: cleared.rows.length });
     }

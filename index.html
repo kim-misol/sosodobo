@@ -872,12 +872,34 @@
   body:not([data-legacy="namhae"]) .legacy-only{display:none !important;}
   body.trip-viewer #settle,body.trip-viewer .settle-intro,body.trip-viewer .cost-box,body.trip-viewer .ph-toolbar,
   body.trip-viewer .m-fab,body.trip-viewer .m-add,body.trip-viewer [data-m-remove]{display:none !important;}
-  body[data-legacy="namhae"] .trip-days,body:not([data-legacy]) .trip-days{display:none !important;}
-  .trip-days{display:grid;gap:10px;margin:0 0 28px;}
-  .trip-day{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;}
-  .trip-day b{font-size:16px;}
-  .trip-day p{margin:0;color:var(--sub);font-size:13.5px;}
-  .trip-days-note{margin:0 4px;color:var(--sub);font-size:12.5px;}
+  .trip-days:empty{min-height:120px;}
+  .it-day-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px;}
+  .it-day-head .day-label{margin-bottom:0;}
+  .it-date{font-size:13px;color:var(--sub);font-weight:600;font-variant-numeric:tabular-nums;}
+  .it-edit{margin-left:auto;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:700;color:var(--sea);cursor:pointer;font-family:inherit;}
+  .it-fill{border:0;background:none;color:var(--sea);font-weight:700;cursor:pointer;font-family:inherit;font-size:inherit;padding:0;text-decoration:underline;}
+  .it-empty{color:var(--sub);}
+  .it-rows{display:flex;flex-direction:column;gap:10px;}
+  .it-links{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px;}
+  .it-links a{font-size:12.5px;font-weight:700;color:var(--sea);}
+  .it-free{background:#eef3e8;border-radius:12px;padding:12px 14px;font-size:14.5px;}
+  .course-card.no-img,.lodge-card.no-img{grid-template-columns:1fr;}
+  .it-sheet .it-sec{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:6px;}
+  .it-sec-head{display:flex;align-items:center;justify-content:space-between;}
+  .it-sec-head h3{margin:0;font-size:15px;}
+  .it-add{border:0;background:none;color:var(--sea);font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit;}
+  .it-row{display:flex;align-items:center;gap:8px;background:var(--sand);border-radius:12px;padding:9px 10px;}
+  .it-row-main{flex:1;min-width:0;display:flex;flex-direction:column;font-size:14px;font-weight:600;}
+  .it-row-main span{font-size:12px;color:var(--sub);font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .it-row-tools{display:flex;gap:2px;flex:none;}
+  .it-row-tools button{width:32px;height:32px;border:0;background:var(--card);border-radius:8px;cursor:pointer;font-size:14px;color:var(--ink);}
+  .it-row-tools button:disabled{opacity:.3;cursor:default;}
+  .it-none{margin:0;font-size:13px;color:var(--sub);}
+  .it-back{align-self:flex-start;border:0;background:none;color:var(--sea);font-weight:700;cursor:pointer;font-family:inherit;padding:0;font-size:13.5px;}
+  .it-map-hint{margin:0;font-size:12.5px;color:var(--sea);font-weight:600;}
+  .it-inline{flex-direction:row;}
+  .it-inline label{flex:1;}
+  .tui-form textarea,.tui-form select{border:1px solid var(--line);background:var(--sand);border-radius:10px;padding:10px 12px;font-size:16px;font-family:inherit;color:var(--ink);width:100%;}
   .nav-trip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--ink);font-family:inherit;flex-shrink:0;}
   .auth-viewer-bar{position:sticky;top:0;z-index:70;display:flex;align-items:center;gap:10px;justify-content:space-between;
     background:var(--sea);color:#f5efdb;font-size:12.5px;padding:8px 14px;}
@@ -911,6 +933,7 @@
   .tui-form{display:flex;flex-direction:column;gap:12px;}
   .tui-form > label,.tui-two label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--sub);font-weight:600;}
   .tui-form em{color:#b5572b;font-style:normal;}
+  .tui-form [hidden]{display:none !important;}
   .tui-opt{font-weight:400;}
   .tui-form input:not([type=radio]):not([type=checkbox]){border:1px solid var(--line);background:var(--sand);border-radius:10px;padding:10px 12px;font-size:16px;font-family:inherit;color:var(--ink);width:100%;min-width:0;}
   .tui-two{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
@@ -1138,228 +1161,9 @@
     </div>
   </div>
 
-  <!-- 옛 남해 페이지가 아닌 여행: 여행 정보로 그리는 날짜 카드 (trip-context.js) -->
+  <!-- 날짜별 일정: DB 에서 불러와 그림 (itinerary-ui.js). 남해 여행의 예전 일정도 DB 로 옮겨 같은 모양으로. -->
   <div class="trip-days" id="trip-days" data-m="home"></div>
 
-  <div class="timeline legacy-only" data-m="home">
-
-  <!-- DAY 1 -->
-  <section class="day">
-    <span class="day-label">DAY 1</span>
-    <h2>동대만길</h2>
-    <p class="desc">창선대교 단항검문소에서 출발해 창선면행정복지센터까지 15km를 걸어요.</p>
-
-    <div class="block">
-      <h3>🚗 주차 &amp; 이동</h3>
-      <div class="taxi" style="margin-bottom:10px;">
-        <div class="icon">🅿️</div>
-        <div>
-          <b>주차 위치</b>
-          <span>창선면행정복지센터 근처 무료공영주차장 (경상남도 남해군 창선면 상죽리 101-29)</span>
-        </div>
-      </div>
-      <div class="taxi">
-        <div class="icon">🚌</div>
-        <div>
-          <b>창선면행정복지센터 → 창선대교 단항검문소</b>
-          <span>택시 약 11분 또는 버스 15분 (버스 801번, 194번) — 도착지에 주차해두고 여기서 출발지점으로 이동해요.</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="block">
-      <h3>🚶 도보 코스 — 3코스 동대만길</h3>
-      <div class="course-card">
-        <img src="assets/map03.png" alt="03코스 동대만길 지도">
-        <div class="course-meta">
-          <div class="name">동대만길 (남파랑길 36코스)</div>
-          <table>
-            <tr><td>출발</td><td class="v">창선대교 단항검문소</td></tr>
-            <tr><td>도착</td><td class="v">창선면행정복지센터</td></tr>
-            <tr><td>총 거리</td><td class="v">15.0km</td></tr>
-            <tr><td>걷는 시간</td><td class="v">5시간 30분 내외</td></tr>
-            <tr><td>난이도</td><td class="v">★★★☆</td></tr>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div class="block">
-      <h3>📸 동대만길 미리보기</h3>
-      <div class="carousel" id="day3-carousel">
-        <div class="carousel-track">
-          <div class="slide"><img src="assets/day3-carousel/slide-01.jpg" alt="동대만길 소개 - 창선대교 단항검문소부터 창선면행정복지센터까지 구간별 거리 안내" loading="lazy"></div>
-          <div class="slide"><img src="assets/day3-carousel/slide-02.jpg" alt="03 동대만길 코스 정보 - 총거리 15.0km, 걷는 시간 5시간 30분 내외, 난이도 ★★★" loading="lazy"></div>
-          <div class="slide"><img src="assets/day3-carousel/slide-03.jpg" alt="인생샷 포인트1 창선대교" loading="lazy"></div>
-          <div class="slide"><img src="assets/day3-carousel/slide-04.jpg" alt="인생샷 포인트2 대방산" loading="lazy"></div>
-          <div class="slide"><img src="assets/day3-carousel/slide-05.jpg" alt="인생샷 포인트3 왕후박나무, 수령 500년 이상 천연기념물" loading="lazy"></div>
-          <div class="slide"><img src="assets/day3-carousel/slide-06.jpg" alt="동대만 해안 마을 풍경" loading="lazy"></div>
-          <div class="slide"><img src="assets/day3-carousel/slide-07.jpg" alt="동대만길을 따라 걷는 하늘과 숲 풍경" loading="lazy"></div>
-          <div class="slide"><img src="assets/day3-carousel/slide-08.jpg" alt="동대만길 숲길 구간 전경" loading="lazy"></div>
-          <div class="slide"><img src="assets/day3-carousel/slide-09.jpg" alt="바다 위 소초도 풍경" loading="lazy"></div>
-          <div class="slide"><img src="assets/day3-carousel/slide-10.jpg" alt="시작점 창선대교 단항검문소 해안도로" loading="lazy"></div>
-          <div class="slide"><img src="assets/day3-carousel/slide-11.jpg" alt="남해바래길탐방안내센터 인스타그램과 앱 QR코드 안내" loading="lazy"></div>
-        </div>
-        <button type="button" class="carousel-btn prev" aria-label="이전 사진">‹</button>
-        <button type="button" class="carousel-btn next" aria-label="다음 사진">›</button>
-        <div class="carousel-dots">
-          <button type="button" class="dot active" aria-label="1번 사진으로 이동" aria-current="true"></button>
-          <button type="button" class="dot" aria-label="2번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="3번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="4번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="5번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="6번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="7번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="8번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="9번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="10번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="11번 사진으로 이동" aria-current="false"></button>
-        </div>
-      </div>
-    </div>
-
-    <div class="block">
-      <h3>🚕 이동</h3>
-      <div class="taxi">
-        <div class="icon">🚕</div>
-        <div>
-          <b>창선면 → 1일차 숙소</b>
-          <span>도보 코스 완주 후 창선면에서 택시로 약 10분 이동해 첫째 날 숙소로 복귀합니다.</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="block">
-      <h3>🏠 숙소</h3>
-      <div class="lodge-card">
-        <img src="assets/lodge1.png" alt="남해는, 지금">
-        <div class="lodge-info">
-          <div class="name">남해는, 지금</div>
-          <span class="price">1인실 기준 17만원 / 박</span>
-          <p>4명이 나눠서 결제</p>
-          <a href="https://naver.me/5V8TldZP" target="_blank">네이버지도에서 보기 →</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- DAY 2 -->
-  <section class="day">
-    <span class="day-label">DAY 2</span>
-    <h2>말발굽길 + 고사리밭길 일부</h2>
-    <p class="desc">적량마을에서 출발해 가인리까지, 총 약 17.5km를 걸어요.</p>
-
-    <div class="block">
-      <h3>🚗 주차 &amp; 이동</h3>
-      <div class="taxi" style="margin-bottom:10px;">
-        <div class="icon">🅿️</div>
-        <div>
-          <b>주차 위치</b>
-          <span>파도가 머무는 정원 (가인리) — 숙소 앞에 주차해두고 출발지점으로 이동해요.</span>
-        </div>
-      </div>
-      <div class="taxi">
-        <div class="icon">🚌</div>
-        <div>
-          <b>파도가 머무는 정원 → 창선교 남단</b>
-          <span>택시 약 15분 또는 버스 20분 (버스 040번, 701번)</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="block">
-      <h3>🚶 도보 코스 ① — 5코스 말발굽길</h3>
-      <div class="course-card">
-        <img src="assets/map05.png" alt="05코스 말발굽길 지도">
-        <div class="course-meta">
-          <div class="name">말발굽길 (남파랑길 38코스)</div>
-          <table>
-            <tr><td>시작점</td><td class="v">적량마을</td></tr>
-            <tr><td>총 거리</td><td class="v">11.9km</td></tr>
-            <tr><td>걷는 시간</td><td class="v">4시간 30분 내외</td></tr>
-            <tr><td>난이도</td><td class="v">★★☆☆</td></tr>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div class="block">
-      <h3>🚶 도보 코스 ② — 4코스 고사리밭길 (일부, 가인리까지)</h3>
-      <div class="course-card">
-        <img src="assets/map04.png" alt="04코스 고사리밭길 지도">
-        <div class="course-meta">
-          <div class="name">고사리밭길 (남파랑길 37코스)</div>
-          <table>
-            <tr><td>코스 전체 시작점</td><td class="v">창선면행정복지센터</td></tr>
-            <tr><td>코스 전체 거리</td><td class="v">14.9km (오늘은 가인리까지만)</td></tr>
-            <tr><td>난이도</td><td class="v">★★★★</td></tr>
-          </table>
-          <div class="note">⚠️ 3~6월 고사리밭길은 사전예약제로만 탐방 가능 — 예약 여부 미리 확인!</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="block">
-      <h3>📸 말발굽길 미리보기</h3>
-      <div class="carousel" id="day2-carousel">
-        <div class="carousel-track">
-          <div class="slide"><img src="assets/day2-carousel/slide-01.jpg" alt="05 말발굽길 코스 정보 - 총거리 12.2km, 걷는 시간 4시간 30분 내외, 난이도 ★★" loading="lazy"></div>
-          <div class="slide"><img src="assets/day2-carousel/slide-02.jpg" alt="말발굽길 구간별 거리 안내 - 적량마을부터 창선교 남단(지족)까지" loading="lazy"></div>
-          <div class="slide"><img src="assets/day2-carousel/slide-03.jpg" alt="힐링 포인트1 창선교, 적량마을에서 시작해 대곡과 장포를 지나는 코스 지도" loading="lazy"></div>
-          <div class="slide"><img src="assets/day2-carousel/slide-04.jpg" alt="힐링 포인트2 추섬공원, 고려시대 군마를 키우던 지역이라 말발굽길이라는 이름이 붙음" loading="lazy"></div>
-          <div class="slide"><img src="assets/day2-carousel/slide-05.jpg" alt="코스1 보현사, 숲길 사이 고즈넉한 쉼터" loading="lazy"></div>
-          <div class="slide"><img src="assets/day2-carousel/slide-06.jpg" alt="코스2 지족해협죽방렴, 남해 전통 어업 유산" loading="lazy"></div>
-          <div class="slide"><img src="assets/day2-carousel/slide-07.jpg" alt="잔잔한 바다와 포구 풍경" loading="lazy"></div>
-          <div class="slide"><img src="assets/day2-carousel/slide-08.jpg" alt="작은 어선이 머무는 포구와 창선면 마을길 풍경" loading="lazy"></div>
-          <div class="slide"><img src="assets/day2-carousel/slide-09.jpg" alt="푸른 바다를 따라 걷는 말발굽길 전경" loading="lazy"></div>
-          <div class="slide"><img src="assets/day2-carousel/slide-10.jpg" alt="숲길과 해안길이 번갈아 이어지는 구간 풍경" loading="lazy"></div>
-          <div class="slide"><img src="assets/day2-carousel/slide-11.jpg" alt="말발굽길의 탁 트인 바다 풍경을 배경으로 선 사람" loading="lazy"></div>
-          <div class="slide"><img src="assets/day2-carousel/slide-12.jpg" alt="걷는 동안 만나는 풍경과 이야기, 작은소풍 바래길 행사 안내" loading="lazy"></div>
-          <div class="slide"><img src="assets/day2-carousel/slide-13.jpg" alt="시작점 적량마을 안내, 바다와 마을을 잇는 말발굽길" loading="lazy"></div>
-        </div>
-        <button type="button" class="carousel-btn prev" aria-label="이전 사진">‹</button>
-        <button type="button" class="carousel-btn next" aria-label="다음 사진">›</button>
-        <div class="carousel-dots">
-          <button type="button" class="dot active" aria-label="1번 사진으로 이동" aria-current="true"></button>
-          <button type="button" class="dot" aria-label="2번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="3번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="4번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="5번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="6번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="7번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="8번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="9번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="10번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="11번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="12번 사진으로 이동" aria-current="false"></button>
-          <button type="button" class="dot" aria-label="13번 사진으로 이동" aria-current="false"></button>
-        </div>
-      </div>
-    </div>
-
-    <div class="block">
-      <h3>🏠 숙소</h3>
-      <div class="lodge-card">
-        <img src="assets/lodge2.png" alt="파도가 머무는 정원">
-        <div class="lodge-info">
-          <div class="name">파도가 머무는 정원</div>
-          <span class="price">30만원 / 박</span>
-          <p>가인리 소재 · 별장식 민박 · 앞바다 수영/스노클링 가능</p>
-          <p>3명이 나눠서 결제</p>
-          <a href="https://naver.me/FvQ1jynR" target="_blank">네이버지도에서 보기 →</a><br>
-          <a href="https://m.cafe.naver.com/ca-fe/web/cafes/eemog/articles/118?useCafeId=false&tc" target="_blank">숙소 소개글 보기 →</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- DAY 3 -->
-  <section class="day">
-    <span class="day-label">DAY 3</span>
-    <h2>발 닿는대로</h2>
-  </section>
-
-  </div>
 
   <div class="section-intro" id="photos-intro" data-m="none">
     <span class="icon">📷</span>
@@ -1488,6 +1292,8 @@
 <script src="assets/reel-core.js"></script>
 <script src="assets/reel-ui.js"></script>
 <script src="assets/trip-ui.js"></script>
+<script src="assets/itinerary-core.js"></script>
+<script src="assets/itinerary-ui.js"></script>
 <script src="assets/mobile-shell.js"></script>
 <script>
   document.querySelectorAll('.carousel').forEach(function (el) {

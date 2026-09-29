@@ -1,0 +1,65 @@
+// 남해 바래길 여행의 일정 · 숙소 · 미리보기 사진 (예전 index.html 에 직접 적혀 있던 내용).
+// _db.js 가 여러 여행으로 옮길 때 한 번만 DB 에 넣습니다. 사진·지도 이미지는 저장소가 아니라 사이트 안 assets/ 파일 그대로.
+module.exports = {
+  days: [
+    {
+      dayNo: 1,
+      title: '동대만길',
+      summary: '창선대교 단항검문소에서 출발해 창선면행정복지센터까지 15km를 걸어요.',
+      items: [
+        { kind: 'parking', name: '창선면행정복지센터 근처 무료공영주차장', memo: '경상남도 남해군 창선면 상죽리 101-29' },
+        { kind: 'move', mode: 'bus', timing: 'before', fromPlace: '창선면행정복지센터', toPlace: '창선대교 단항검문소', memo: '택시 약 11분 또는 버스 15분 (버스 801번, 194번) — 도착지에 주차해두고 여기서 출발지점으로 이동해요.' },
+        { kind: 'course', name: '3코스 동대만길', subtitle: '남파랑길 36코스', fromPlace: '창선대교 단항검문소', toPlace: '창선면행정복지센터', distanceKm: 15.0, durationText: '5시간 30분 내외', difficulty: 3, imageUrl: 'assets/map03.png' },
+        { kind: 'move', mode: 'taxi', timing: 'after', fromPlace: '창선면', toPlace: '1일차 숙소', memo: '도보 코스 완주 후 창선면에서 택시로 약 10분 이동해 첫째 날 숙소로 복귀합니다.' },
+      ],
+      photos: [
+        { url: 'assets/day3-carousel/slide-01.jpg', caption: "동대만길 소개 - 창선대교 단항검문소부터 창선면행정복지센터까지 구간별 거리 안내" },
+        { url: 'assets/day3-carousel/slide-02.jpg', caption: "03 동대만길 코스 정보 - 총거리 15.0km, 걷는 시간 5시간 30분 내외, 난이도 ★★★" },
+        { url: 'assets/day3-carousel/slide-03.jpg', caption: "인생샷 포인트1 창선대교" },
+        { url: 'assets/day3-carousel/slide-04.jpg', caption: "인생샷 포인트2 대방산" },
+        { url: 'assets/day3-carousel/slide-05.jpg', caption: "인생샷 포인트3 왕후박나무, 수령 500년 이상 천연기념물" },
+        { url: 'assets/day3-carousel/slide-06.jpg', caption: "동대만 해안 마을 풍경" },
+        { url: 'assets/day3-carousel/slide-07.jpg', caption: "동대만길을 따라 걷는 하늘과 숲 풍경" },
+        { url: 'assets/day3-carousel/slide-08.jpg', caption: "동대만길 숲길 구간 전경" },
+        { url: 'assets/day3-carousel/slide-09.jpg', caption: "바다 위 소초도 풍경" },
+        { url: 'assets/day3-carousel/slide-10.jpg', caption: "시작점 창선대교 단항검문소 해안도로" },
+        { url: 'assets/day3-carousel/slide-11.jpg', caption: "남해바래길탐방안내센터 인스타그램과 앱 QR코드 안내" },
+      ],
+    },
+    {
+      dayNo: 2,
+      title: '말발굽길 + 고사리밭길 일부',
+      summary: '적량마을에서 출발해 가인리까지, 총 약 17.5km를 걸어요.',
+      items: [
+        { kind: 'parking', name: '파도가 머무는 정원 (가인리)', memo: '숙소 앞에 주차해두고 출발지점으로 이동해요.' },
+        { kind: 'move', mode: 'bus', timing: 'before', fromPlace: '파도가 머무는 정원', toPlace: '창선교 남단', memo: '택시 약 15분 또는 버스 20분 (버스 040번, 701번)' },
+        { kind: 'course', name: '5코스 말발굽길', subtitle: '남파랑길 38코스', fromPlace: '적량마을', distanceKm: 11.9, durationText: '4시간 30분 내외', difficulty: 2, imageUrl: 'assets/map05.png' },
+        { kind: 'course', name: '4코스 고사리밭길 (일부, 가인리까지)', subtitle: '남파랑길 37코스', fromPlace: '창선면행정복지센터', toPlace: '가인리', difficulty: 4, imageUrl: 'assets/map04.png',
+          memo: '코스 전체 거리 14.9km — 오늘은 가인리까지만 걸어요. ⚠️ 3~6월 고사리밭길은 사전예약제로만 탐방 가능 — 예약 여부 미리 확인!' },
+      ],
+      photos: [
+        { url: 'assets/day2-carousel/slide-01.jpg', caption: "05 말발굽길 코스 정보 - 총거리 12.2km, 걷는 시간 4시간 30분 내외, 난이도 ★★" },
+        { url: 'assets/day2-carousel/slide-02.jpg', caption: "말발굽길 구간별 거리 안내 - 적량마을부터 창선교 남단(지족)까지" },
+        { url: 'assets/day2-carousel/slide-03.jpg', caption: "힐링 포인트1 창선교, 적량마을에서 시작해 대곡과 장포를 지나는 코스 지도" },
+        { url: 'assets/day2-carousel/slide-04.jpg', caption: "힐링 포인트2 추섬공원, 고려시대 군마를 키우던 지역이라 말발굽길이라는 이름이 붙음" },
+        { url: 'assets/day2-carousel/slide-05.jpg', caption: "코스1 보현사, 숲길 사이 고즈넉한 쉼터" },
+        { url: 'assets/day2-carousel/slide-06.jpg', caption: "코스2 지족해협죽방렴, 남해 전통 어업 유산" },
+        { url: 'assets/day2-carousel/slide-07.jpg', caption: "잔잔한 바다와 포구 풍경" },
+        { url: 'assets/day2-carousel/slide-08.jpg', caption: "작은 어선이 머무는 포구와 창선면 마을길 풍경" },
+        { url: 'assets/day2-carousel/slide-09.jpg', caption: "푸른 바다를 따라 걷는 말발굽길 전경" },
+        { url: 'assets/day2-carousel/slide-10.jpg', caption: "숲길과 해안길이 번갈아 이어지는 구간 풍경" },
+        { url: 'assets/day2-carousel/slide-11.jpg', caption: "말발굽길의 탁 트인 바다 풍경을 배경으로 선 사람" },
+        { url: 'assets/day2-carousel/slide-12.jpg', caption: "걷는 동안 만나는 풍경과 이야기, 작은소풍 바래길 행사 안내" },
+        { url: 'assets/day2-carousel/slide-13.jpg', caption: "시작점 적량마을 안내, 바다와 마을을 잇는 말발굽길" },
+      ],
+    },
+    { dayNo: 3, title: '발 닿는대로', planMode: 'free', items: [], photos: [] },
+  ],
+  lodgings: [
+    { name: '남해는, 지금', checkIn: '2026-09-24', nights: 1, cost: 170000, memo: '1인실 기준', imageUrl: 'assets/lodge1.png',
+      mapUrl: 'https://naver.me/5V8TldZP', expensePrefix: '숙소1' },
+    { name: '파도가 머무는 정원', checkIn: '2026-09-25', nights: 1, cost: 300000, memo: '가인리 소재 · 별장식 민박 · 앞바다 수영/스노클링 가능',
+      imageUrl: 'assets/lodge2.png', mapUrl: 'https://naver.me/FvQ1jynR',
+      linkUrl: 'https://m.cafe.naver.com/ca-fe/web/cafes/eemog/articles/118?useCafeId=false&tc', expensePrefix: '숙소2' },
+  ],
+};

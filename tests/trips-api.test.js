@@ -128,3 +128,80 @@ test('withMember: 링크 공개 여행은 로그인 없이 사진 목록을 읽�
     assert.equal(like.statusCode, 401, '좋아요도 참여자만');
   });
 });
+
+// ---- 날짜별 일정 ----------------------------------------------------------------
+
+function itinerarySql(row, extra) {
+  return sqlFor(row, (text, values) => {
+    if (extra) { const r = extra(text, values); if (r) return r; }
+    if (text.startsWith('SELECT id FROM trip_days WHERE trip_id')) return { rows: [{ id: 70 }] };
+    if (text.startsWith('SELECT COUNT(*) AS n, COALESCE(MAX(position)')) return { rows: [{ n: '2', maxpos: '4' }] };
+    if (text.startsWith('SELECT title, summary, plan_mode, free_note FROM trip_days')) return { rows: [{ title: '옛 제목', summary: null, plan_mode: 'course', free_note: null }] };
+    return null;
+  });
+}
+
+test('일정 보기: 참여자·링크 공개는 되고, 비공개 여행의 비참여자는 403', async () => {
+  await withEnv(ENV, async () => {
+    const res = await call(loadHandler('trips.js', itinerarySql(tripRow()), { '@vercel/blob': blob }), { method: 'GET', query: { id: '5', part: 'itinerary' }, headers: { cookie: cookie(3) } });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.days.length, 3);
+    assert.equal(res.body.canEdit, true);
+    const outsider = tripRow({ traveler_id: null, role: null });
+    assert.equal((await call(loadHandler('trips.js', itinerarySql(outsider), { '@vercel/blob': blob }), { method: 'GET', query: { id: '5', part: 'itinerary' }, headers: { cookie: cookie(9) } })).statusCode, 403);
+    const pub = await call(loadHandler('trips.js', itinerarySql(Object.assign({}, outsider, { visibility: 'link' })), { '@vercel/blob': blob }), { method: 'GET', query: { id: '5', part: 'itinerary' } });
+    assert.equal(pub.statusCode, 200);
+    assert.equal(pub.body.canEdit, false);
+  });
+});
+
+test('일정 고치기: 참여자 가능, "참여자 모두 수정"이 꺼지면 관리자만, 비참여자는 불가', async () => {
+  await withEnv(ENV, async () => {
+    const body = { kind: 'course', name: '동대만길', distanceKm: '15' };
+    const sql = itinerarySql(tripRow());
+    const ok = await call(loadHandler('trips.js', sql, { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'item', day: '1' }, headers: { cookie: cookie(3) }, body });
+    assert.equal(ok.statusCode, 201);
+    const ins = sql.calls.find((c) => c.text.startsWith('INSERT INTO day_items'));
+    assert.deepEqual(ins.values.slice(0, 4), [70, 'course', 5, '동대만길'], '그날 맨 뒤(순서 5)에');
+    const locked = await call(loadHandler('trips.js', itinerarySql(tripRow({ members_can_edit: false })), { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'item', day: '1' }, headers: { cookie: cookie(3) }, body });
+    assert.equal(locked.statusCode, 403);
+    assert.equal(locked.body.code, 'cannot_edit');
+    const adminLocked = await call(loadHandler('trips.js', itinerarySql(tripRow({ members_can_edit: false, role: 'admin' })), { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'item', day: '1' }, headers: { cookie: cookie(3) }, body });
+    assert.equal(adminLocked.statusCode, 201, '관리자는 토글과 상관없이 가능');
+    const outsider = await call(loadHandler('trips.js', itinerarySql(tripRow({ traveler_id: null, role: null, visibility: 'link' })), { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'item', day: '1' }, headers: { cookie: cookie(9) }, body });
+    assert.equal(outsider.statusCode, 403);
+  });
+});
+
+test('일정 고치기: 입력 검증 · 기간 밖 날짜 · 다른 여행 항목은 404', async () => {
+  await withEnv(ENV, async () => {
+    const h = () => loadHandler('trips.js', itinerarySql(tripRow()), { '@vercel/blob': blob });
+    const bad = await call(h(), { method: 'POST', query: { id: '5', part: 'item', day: '1' }, headers: { cookie: cookie(3) }, body: { kind: 'course', name: 'x', difficulty: 9 } });
+    assert.match(bad.body.error, /1~5/);
+    const out = await call(h(), { method: 'PATCH', query: { id: '5', part: 'day', day: '4' }, headers: { cookie: cookie(3) }, body: { title: 'x' } });
+    assert.match(out.body.error, /기간 밖/);
+    const missing = await call(h(), { method: 'DELETE', query: { id: '5', part: 'item', item: '99' }, headers: { cookie: cookie(3) } });
+    assert.equal(missing.statusCode, 404);
+    const sql = itinerarySql(tripRow());
+    const day = await call(loadHandler('trips.js', sql, { '@vercel/blob': blob }), { method: 'PATCH', query: { id: '5', part: 'day', day: '2' }, headers: { cookie: cookie(3) }, body: { planMode: 'free', freeNote: '바다 보이면 멈추기' } });
+    assert.equal(day.statusCode, 200);
+    const upd = sql.calls.find((c) => c.text.startsWith('UPDATE trip_days SET'));
+    assert.deepEqual(upd.values, ['옛 제목', null, 'free', '바다 보이면 멈추기', 70], '안 보낸 제목은 그대로');
+  });
+});
+
+test('일정 순서 바꾸기: 같은 종류 안에서만', async () => {
+  await withEnv(ENV, async () => {
+    const sql = itinerarySql(tripRow(), (text) => {
+      if (text.startsWith('SELECT i.* FROM day_items i JOIN trip_days d ON d.id = i.day_id WHERE i.id')) return { rows: [{ id: 4, day_id: 70, kind: 'course', position: 4 }] };
+      if (text.startsWith('SELECT id, kind, timing, position FROM day_items WHERE day_id')) {
+        return { rows: [{ id: 2, kind: 'move', timing: 'before', position: 2 }, { id: 3, kind: 'course', position: 3 }, { id: 4, kind: 'course', position: 4 }] };
+      }
+      return null;
+    });
+    const res = await call(loadHandler('trips.js', sql, { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'item-move', item: '4' }, headers: { cookie: cookie(3) }, body: { dir: -1 } });
+    assert.equal(res.statusCode, 200);
+    const moves = sql.calls.filter((c) => c.text.startsWith('UPDATE day_items SET position')).map((c) => c.values);
+    assert.deepEqual(moves, [[3, 4], [4, 3]]);
+  });
+});
