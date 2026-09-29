@@ -555,6 +555,10 @@
   // 렌더링: 나는 누구 / 필터 / 격자
   // ---------------------------------------------------------------------------
   function renderMe() {
+    if (state.lockedMe) {
+      els.me.innerHTML = '<span class="ph-hint">👤 <b>' + esc(nameOf(state.me)) + '</b>(으)로 올리고 좋아요·댓글을 남겨요</span>';
+      return;
+    }
     if (!state.travelers.length) {
       els.me.innerHTML = '<span class="ph-hint">먼저 아래 <a href="#settle">지출·정산</a>의 여행자에 이름을 등록해 주세요.</span>';
       return;
@@ -839,7 +843,7 @@
   }
 
   function pendingMeSelectHtml() {
-    if (!state.travelers.length) return '';
+    if (state.lockedMe || !state.travelers.length) return '';
     return '<select data-pend-me aria-label="나는 누구?"><option value="">나는 누구?</option>' + state.travelers.map(function (t) {
       return '<option value="' + t.id + '">나는 ' + esc(t.name) + '</option>';
     }).join('') + '</select>';
@@ -1648,6 +1652,7 @@
 
   /** 나는 누구 바꾸기 (PC 드롭다운 · 업로드 목록 · 모바일 프로필 탭이 함께 씀). */
   function setMe(id) {
+    if (state.lockedMe) return; // 로그인했으면 로그인한 사람으로 고정
     saveMe(id);
     render();
     renderPending();
@@ -1666,6 +1671,16 @@
     els.mtabs = $('#ph-mtabs', els.root);
     els.lightbox = $('#ph-lightbox');
     state.me = readMe();
+    // 로그인이 켜져 있으면 "나는 누구" 대신 로그인한 사람으로 고정 (auth-ui.js)
+    var lockToMember = function (m) {
+      if (!m || !m.traveler) return;
+      state.lockedMe = true;
+      saveMe(m.traveler.id);
+      render();
+      renderPending();
+    };
+    if (window.AuthUI && window.AuthUI.member) lockToMember(window.AuthUI.member);
+    document.addEventListener('sosodobo:auth', function (e) { lockToMember(e.detail); });
     bind();
     load();
     checkStorage();

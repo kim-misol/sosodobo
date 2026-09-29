@@ -2,6 +2,7 @@
 //   POST   { content }        → 준비물 추가
 //   PATCH  ?id=123 { content } → 준비물 내용 수정
 //   DELETE ?id=123            → 준비물 삭제
+const { withMember } = require('./_auth');
 const { sql, ensureSchema, sendError } = require('./_db');
 
 function readBody(req) {
@@ -16,7 +17,7 @@ function readBody(req) {
   return req.body;
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   try {
     await ensureSchema();
 
@@ -67,4 +68,7 @@ module.exports = async function handler(req, res) {
   } catch (err) {
     return sendError(res, err);
   }
-};
+}
+
+// 로그인이 켜져 있으면 여행 참여자만, travelerId 는 로그인한 사람으로 (api/_auth.js)
+module.exports = withMember(handler);

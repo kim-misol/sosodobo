@@ -1,9 +1,10 @@
 // GET /api/state
 // 여행자 + 지출(참여자 목록 포함) 전체를 한 번에 돌려줍니다.
 // 정산 계산 자체는 프론트엔드의 settle-core.js(테스트된 순수 함수)에서 합니다.
+const { withMember } = require('./_auth');
 const { sql, ensureSchema, sendError } = require('./_db');
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ error: 'GET만 지원합니다.' });
@@ -45,4 +46,7 @@ module.exports = async function handler(req, res) {
   } catch (err) {
     return sendError(res, err);
   }
-};
+}
+
+// 로그인이 켜져 있으면 여행 참여자만, travelerId 는 로그인한 사람으로 (api/_auth.js)
+module.exports = withMember(handler);

@@ -8,6 +8,7 @@
 //
 // 파일 자체는 브라우저가 Vercel Blob 에 직접 올리고(/api/photo-upload 가 토큰 발급),
 // 이 API 는 주소와 촬영 정보만 DB 에 저장합니다.
+const { withMember } = require('./_auth');
 const { del } = require('@vercel/blob');
 const { sql, ensureSchema, sendError } = require('./_db');
 const { parsePhoto, parsePhotoPatch, toInt, mapPhotoRow } = require('./_photo-validate');
@@ -82,7 +83,7 @@ async function findOwnedPhoto(req, travelerIdRaw, ownerOnly = true) {
   return { row, travelerId, isOwner };
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   try {
     await ensureSchema();
 
@@ -142,7 +143,9 @@ module.exports = async function handler(req, res) {
   } catch (err) {
     return sendError(res, err);
   }
-};
+}
 
+// 로그인이 켜져 있으면 여행 참여자만, travelerId 는 로그인한 사람으로 (api/_auth.js)
+module.exports = withMember(handler);
 module.exports.findOwnedPhoto = findOwnedPhoto;
 module.exports.readBody = readBody;

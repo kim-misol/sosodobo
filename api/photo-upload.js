@@ -5,6 +5,7 @@
 // 저장소 연결 방식에 따라 두 가지로 동작합니다.
 //  - token: BLOB_READ_WRITE_TOKEN 이 있으면 클라이언트 토큰 발급 (handleUpload ↔ 브라우저 upload)
 //  - oidc : 토큰 없이 BLOB_STORE_ID 만 있으면 OIDC 로 서명한 업로드 주소 발급 (handleUploadPresigned ↔ uploadPresigned)
+const { withMember } = require('./_auth');
 const { handleUpload, handleUploadPresigned } = require('@vercel/blob/client');
 const { issueSignedToken } = require('@vercel/blob');
 const { uploadTokenOptions, presignedUploadOptions } = require('./_photo-validate');
@@ -22,7 +23,7 @@ function readBody(req) {
   return req.body;
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   // GET: 업로드할 수 있는 상태인지(Blob 저장소 연결 여부)만 알려줍니다. 토큰 값은 절대 내보내지 않아요.
   if (req.method === 'GET') {
     const mode = blobUploadMode(process.env);
@@ -73,4 +74,7 @@ module.exports = async function handler(req, res) {
         : (err && err.message) || '업로드 준비에 실패했어요.',
     });
   }
-};
+}
+
+// 로그인이 켜져 있으면 여행 참여자만, travelerId 는 로그인한 사람으로 (api/_auth.js)
+module.exports = withMember(handler);

@@ -2,6 +2,7 @@
 //   POST   { name }        → 여행자 추가
 //   DELETE ?id=123         → 여행자 삭제. 지출 기록(결제자·나눠 낸 사람)에 들어 있으면 409 로 막아요
 //                            (빼면 다른 사람들의 정산 금액이 달라지기 때문)
+const { withMember } = require('./_auth');
 const { sql, ensureSchema, sendError } = require('./_db');
 
 // req.body 가 문자열로 올 수도, 이미 파싱돼 올 수도 있어 안전하게 처리합니다.
@@ -17,7 +18,7 @@ function readBody(req) {
   return req.body;
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   try {
     await ensureSchema();
 
@@ -61,4 +62,7 @@ module.exports = async function handler(req, res) {
   } catch (err) {
     return sendError(res, err);
   }
-};
+}
+
+// 로그인이 켜져 있으면 여행 참여자만, travelerId 는 로그인한 사람으로 (api/_auth.js)
+module.exports = withMember(handler);

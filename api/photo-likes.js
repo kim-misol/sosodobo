@@ -2,6 +2,7 @@
 //   POST   { photoId, travelerId }        → 좋아요 (이미 눌렀으면 그대로)
 //   DELETE ?photoId=10&travelerId=1       → 좋아요 취소
 // 두 경우 모두 { photoId, likeCount, likedBy } 로 최신 상태를 돌려줍니다.
+const { withMember } = require('./_auth');
 const { sql, ensureSchema, sendError } = require('./_db');
 const { toInt } = require('./_photo-validate');
 
@@ -24,7 +25,7 @@ async function likeState(photoId) {
   return { photoId, likeCount: likedBy.length, likedBy };
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST' && req.method !== 'DELETE') {
     res.setHeader('Allow', 'POST, DELETE');
     return res.status(405).json({ error: 'POST, DELETE만 지원합니다.' });
@@ -53,4 +54,7 @@ module.exports = async function handler(req, res) {
   } catch (err) {
     return sendError(res, err);
   }
-};
+}
+
+// 로그인이 켜져 있으면 여행 참여자만, travelerId 는 로그인한 사람으로 (api/_auth.js)
+module.exports = withMember(handler);

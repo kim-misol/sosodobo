@@ -7,6 +7,12 @@
 <title>남해 바래길 3일 도보여행</title>
 <script src="assets/places.js"></script>
 <script src="assets/shell-core.js"></script>
+<script>
+  // 로그인 확인이 끝날 때까지 내용을 가려 둡니다 (auth-ui.js 가 풀어요. 스크립트가 못 뜨면 4초 뒤 그냥 보여줌).
+  document.documentElement.classList.add('auth-checking');
+  setTimeout(function () { document.documentElement.classList.remove('auth-checking'); }, 4000);
+</script>
+<script src="assets/auth-ui.js"></script>
 <style>
   :root{
     --sea:#2f5233;
@@ -812,6 +818,51 @@
     .ph-grid{grid-template-columns:repeat(4,1fr);}
   }
 
+
+  /* =====================================================================
+     로그인 (auth-ui.js) — PC · 폰 공통
+     ===================================================================== */
+  .auth-checking body{visibility:hidden;}
+  body.auth-locked{overflow:hidden;}
+  .auth-gate{position:fixed;inset:0;z-index:300;background:var(--sand);overflow-y:auto;display:flex;align-items:flex-start;justify-content:center;
+    padding:calc(env(safe-area-inset-top,0px) + 24px) 20px calc(env(safe-area-inset-bottom,0px) + 24px);visibility:visible;}
+  .auth-card{width:100%;max-width:380px;margin:auto 0;display:flex;flex-direction:column;gap:16px;}
+  .auth-brand{display:flex;flex-direction:column;gap:10px;margin-bottom:8px;}
+  .auth-mark{width:56px;height:56px;border-radius:16px;background:var(--sea);display:grid;place-items:center;font-size:26px;}
+  .auth-brand h1{margin:0;font-size:28px;line-height:1.2;letter-spacing:-.03em;text-wrap:balance;}
+  .auth-brand p{margin:0;color:var(--sub);font-size:14.5px;}
+  .auth-buttons{display:flex;flex-direction:column;gap:10px;}
+  .auth-sso{display:flex;align-items:center;justify-content:center;gap:10px;border-radius:12px;padding:13px;font-size:15px;font-weight:700;
+    text-decoration:none;border:1px solid transparent;}
+  .auth-sso.google{background:#fff;color:#1f1f1f;border-color:#dadce0;}
+  .auth-sso.kakao{background:#FEE500;color:#191600;}
+  .auth-sso:focus-visible,.auth-primary:focus-visible,.auth-link:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .auth-fine{margin:0;font-size:12.5px;color:var(--sub);text-align:center;}
+  .auth-err{margin:0;background:#fbe6dd;color:#8a3413;border-radius:10px;padding:10px 12px;font-size:13.5px;}
+  .auth-form{display:flex;flex-direction:column;gap:10px;}
+  .auth-form > label{font-size:13px;color:var(--sub);font-weight:600;}
+  .auth-form input:not([type=radio]){border:1px solid var(--line);background:var(--card);border-radius:12px;padding:12px 14px;font-size:16px;font-family:inherit;color:var(--ink);width:100%;}
+  .auth-form fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
+  .auth-form legend{font-size:15px;font-weight:700;margin-bottom:6px;}
+  .auth-pick{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px;cursor:pointer;}
+  .auth-pick:has(input:checked){border-color:var(--sea);background:#e3ebdf;font-weight:700;}
+  .auth-pick input{accent-color:var(--sea);width:18px;height:18px;margin:0;}
+  .auth-primary{border:0;background:var(--sea);color:#fff;border-radius:12px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .auth-primary:disabled{opacity:.6;}
+  .auth-link{border:0;background:none;color:var(--sub);font-size:13px;text-decoration:underline;cursor:pointer;font-family:inherit;align-self:center;}
+  .nav-account{display:flex;align-items:center;gap:8px;font-size:13px;}
+  .nav-account:empty{display:none;}
+  .nav-me{font-weight:700;}
+  .nav-logout{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer;color:var(--sub);font-family:inherit;}
+  .m-account{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:14px;}
+  .m-account:first-of-type{border-top:0;}
+  .m-account-dot{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:800;flex:none;}
+  .m-account-dot.google{background:#fff;border:1px solid #dadce0;color:#4285f4;}
+  .m-account-dot.kakao{background:#FEE500;color:#191600;}
+  .m-account-state{margin-left:auto;font-size:12.5px;font-weight:700;color:var(--sea);text-decoration:none;}
+  .m-account-state.on{color:#2f7a4f;}
+  .m-logout{border:0;background:none;color:#b5572b;font-size:14.5px;font-weight:700;cursor:pointer;font-family:inherit;padding:2px 0;}
+
   /* =====================================================================
      폰 화면(폭 768px 미만): 앱 모양 — 위쪽 여행 바 + 하단 탭. PC 는 위의 스타일 그대로.
      어떤 요소가 어느 탭에 속하는지는 data-m, 지금 탭은 body[data-mtab].
@@ -986,6 +1037,7 @@
     <a href="#settle">지출·정산</a>
     <a href="#notes">준비물</a>
   </div>
+  <div class="nav-account" id="nav-account"></div>
 </nav>
 
 <header id="top" data-m="home">

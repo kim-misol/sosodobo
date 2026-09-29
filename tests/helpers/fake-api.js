@@ -42,8 +42,8 @@ function loadHandler(handlerFile, fakeSql, extraMocks) {
   return require(handlerPath);
 }
 
-function mockReq({ method = 'GET', query = {}, body } = {}) {
-  return { method, query, body, headers: {} };
+function mockReq({ method = 'GET', query = {}, body, headers = {} } = {}) {
+  return { method, query, body, headers };
 }
 
 function mockRes() {
@@ -54,6 +54,8 @@ function mockRes() {
     status(code) { this.statusCode = code; return this; },
     json(data) { this.body = data; return this; },
     setHeader(k, v) { this.headers[k] = v; },
+    getHeader(k) { return this.headers[k]; },
+    end() { this.ended = true; return this; },
   };
   return res;
 }

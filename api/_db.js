@@ -85,6 +85,26 @@ async function ensureSchema() {
         updated_at TIMESTAMPTZ
       )`;
       await sql`CREATE INDEX IF NOT EXISTS photo_comments_photo_idx ON photo_comments (photo_id, created_at)`;
+      // 계정: 사람(users) 1명에 Google·카카오 로그인(user_identities)을 여러 개 이어 둘 수 있어요.
+      // 여행자(travelers)는 계정과 1:1 로 연결되고(user_id), 연결 안 된 여행자는 첫 로그인 때 "이게 나" 로 고릅니다.
+      await sql`CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name TEXT,
+        email TEXT,
+        avatar_url TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        last_login_at TIMESTAMPTZ
+      )`;
+      await sql`CREATE TABLE IF NOT EXISTS user_identities (
+        provider TEXT NOT NULL,
+        provider_user_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        email TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (provider, provider_user_id)
+      )`;
+      await sql`ALTER TABLE travelers ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`;
+      await sql`CREATE UNIQUE INDEX IF NOT EXISTS travelers_user_id_key ON travelers (user_id) WHERE user_id IS NOT NULL`;
       // 기존 준비물 항목은 최초 1회만 채워 넣습니다.
       // (사용자가 나중에 전부 지워도 다시 생기지 않도록 플래그로 제어)
       const seeded = await sql`SELECT 1 FROM app_meta WHERE key = 'notes_seeded'`;

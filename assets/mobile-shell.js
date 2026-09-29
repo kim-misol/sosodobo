@@ -165,16 +165,22 @@
       return '<option value="' + x.id + '"' + (x.id === me ? ' selected' : '') + '>' + esc(x.name) + '</option>';
     }).join('') + '</select>';
 
-    els.profile.innerHTML =
-      '<section class="m-block m-me">' + (mine ? avatar(mine.id, mine.name, 'lg') : '<span class="m-avatar lg empty">?</span>') +
-      '<div class="t"><b>' + (mine ? esc(mine.name) : '아직 누군지 몰라요') + '</b>' +
-      '<label class="m-field" for="m-me">나는 누구?' + select + '</label></div></section>' +
-      '<p class="m-note">좋아요 · 댓글 · 사진 올리기는 여기서 고른 이름으로 남아요. Google · 카카오 로그인은 다음 단계에서 추가돼요.</p>' +
+    var auth = window.AuthUI && window.AuthUI.member;
+    var meBlock = auth
+      ? '<section class="m-block m-me">' + avatar(auth.traveler.id, auth.traveler.name, 'lg') +
+        '<div class="t"><b>' + esc(auth.traveler.name) + '</b><span class="m-muted">' +
+        esc(auth.user.email || auth.user.name || '') + '</span></div></section>' + window.AuthUI.accountHtml()
+      : '<section class="m-block m-me">' + (mine ? avatar(mine.id, mine.name, 'lg') : '<span class="m-avatar lg empty">?</span>') +
+        '<div class="t"><b>' + (mine ? esc(mine.name) : '아직 누군지 몰라요') + '</b>' +
+        '<label class="m-field" for="m-me">나는 누구?' + select + '</label></div></section>' +
+        '<p class="m-note">좋아요 · 댓글 · 사진 올리기는 여기서 고른 이름으로 남아요.</p>';
+    els.profile.innerHTML = meBlock +
       '<section class="m-block"><div class="m-block-head"><h2>내 여행</h2></div>' +
       '<div class="m-trip"><span class="m-trip-cover" aria-hidden="true"></span><div class="t"><b>' + esc(t.TRIP_TITLE || '우리 여행') +
       ' <span class="m-chip">보는 중</span></b><span>' + esc(SC.dateRangeLabel(t.TRIP_START_DATE, tripDays())) + ' · ' + list.length + '명 · 사진 ' +
       photoState().photos.length + '장</span><span><span class="m-chip line">' + chip + '</span></span></div></div>' +
-      '<p class="m-note" style="margin:10px 0 0">여러 여행 만들기 · 수정 · 삭제는 다음 단계에서 추가돼요.</p></section>';
+      '<p class="m-note" style="margin:10px 0 0">여러 여행 만들기 · 수정 · 삭제는 다음 단계에서 추가돼요.</p></section>' +
+      (auth ? window.AuthUI.logoutHtml() : '');
   }
 
   // ---------------------------------------------------------------------------
@@ -215,6 +221,7 @@
     }
     if (window.PhotoUI && window.PhotoUI.onChange) window.PhotoUI.onChange(refresh);
     if (window.SettleUI && window.SettleUI.onChange) window.SettleUI.onChange(refresh);
+    document.addEventListener('sosodobo:auth', refresh);
     window.addEventListener('resize', function () {
       document.documentElement.style.setProperty('--m-top-h', els.top.offsetHeight + 'px');
     });

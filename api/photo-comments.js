@@ -3,6 +3,7 @@
 //   POST   { photoId, travelerId, content }     → 댓글 작성
 //   PATCH  ?id=7 { travelerId, content }        → 댓글 수정 (작성자만, "(수정됨)" 표시용 updated_at 기록)
 //   DELETE ?id=7&travelerId=1                   → 댓글 삭제 (작성자만)
+const { withMember } = require('./_auth');
 const { sql, ensureSchema, sendError } = require('./_db');
 const { toInt } = require('./_photo-validate');
 const PhotoCore = require('../assets/photo-core.js');
@@ -51,7 +52,7 @@ async function findOwnedComment(idRaw, travelerIdRaw) {
   return { row: r.rows[0] };
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   try {
     await ensureSchema();
 
@@ -110,4 +111,7 @@ module.exports = async function handler(req, res) {
   } catch (err) {
     return sendError(res, err);
   }
-};
+}
+
+// 로그인이 켜져 있으면 여행 참여자만, travelerId 는 로그인한 사람으로 (api/_auth.js)
+module.exports = withMember(handler);
