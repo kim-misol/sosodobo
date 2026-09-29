@@ -335,7 +335,7 @@
     var send = state.storageMode === 'oidc' ? window.VercelBlobClient.uploadPresigned : window.VercelBlobClient.upload;
     return send(path, blob, {
       access: 'public',
-      handleUploadUrl: API + '/photo-upload',
+      handleUploadUrl: API + '/photo-upload' + (window.TripContext && window.TripContext.trip ? '?trip=' + window.TripContext.trip.id : ''),
       contentType: contentType,
       multipart: blob.size > 8 * 1024 * 1024,
       onUploadProgress: onProgress,
@@ -569,16 +569,16 @@
     els.me.innerHTML = '<select id="ph-me-select" class="ph-me-select" aria-label="나는 누구?">' + opts.join('') + '</select>';
   }
 
-  var FILTERS = [
-    { key: 'all', label: '전체' },
-    { key: 1, label: '1일차' },
-    { key: 2, label: '2일차' },
-    { key: 3, label: '3일차' },
-    { key: 'etc', label: '기타' },
-  ];
+  /** 전체 · 1일차 … N일차 · 기타 (N = 여행 일수) */
+  function filters() {
+    var out = [{ key: 'all', label: '전체' }];
+    for (var d = 1; d <= P.LIMITS.tripDays; d++) out.push({ key: d, label: d + '일차' });
+    out.push({ key: 'etc', label: '기타' });
+    return out;
+  }
 
   function renderTabs() {
-    els.tabs.innerHTML = FILTERS.map(function (f) {
+    els.tabs.innerHTML = filters().map(function (f) {
       var count = P.filterByDay(state.photos, f.key).length;
       if (f.key === 'etc' && count === 0) return '';
       var active = String(state.filter) === String(f.key);
@@ -758,7 +758,8 @@
   // 렌더링: 업로드 대기 목록
   // ---------------------------------------------------------------------------
   function dayOptions(selected) {
-    var opts = [{ v: '', label: '일차 없음' }, { v: 1, label: dayLabelWithDate(1) }, { v: 2, label: dayLabelWithDate(2) }, { v: 3, label: dayLabelWithDate(3) }];
+    var opts = [{ v: '', label: '일차 없음' }];
+    for (var d = 1; d <= P.LIMITS.tripDays; d++) opts.push({ v: d, label: dayLabelWithDate(d) });
     return opts.map(function (o) {
       var sel = String(o.v) === String(selected === null || selected === undefined ? '' : selected) ? ' selected' : '';
       return '<option value="' + o.v + '"' + sel + '>' + esc(o.label) + '</option>';
@@ -1715,6 +1716,8 @@
     onChange: function (fn) { listeners.push(fn); },
   };
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
+  // 여행을 정한 뒤에 불러오기 시작 (trip-context.js). 없으면 바로.
+  var boot = function () { if (window.TripContext) window.TripContext.ready.then(init); else init(); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();

@@ -29,7 +29,7 @@ async function handler(req, res) {
         return res.status(400).json({ error: '준비물은 200자 이하로 입력해 주세요.' });
       }
       const result = await sql`
-        INSERT INTO notes (content) VALUES (${clean})
+        INSERT INTO notes (content, trip_id) VALUES (${clean}, ${req.tripId})
         RETURNING id, content`;
       return res.status(201).json(result.rows[0]);
     }
@@ -46,7 +46,7 @@ async function handler(req, res) {
         return res.status(400).json({ error: '준비물은 200자 이하로 입력해 주세요.' });
       }
       const result = await sql`
-        UPDATE notes SET content = ${clean} WHERE id = ${id}
+        UPDATE notes SET content = ${clean} WHERE id = ${id} AND trip_id = ${req.tripId}
         RETURNING id, content`;
       if (result.rowCount === 0) {
         return res.status(404).json({ error: '해당 준비물을 찾을 수 없어요.' });
@@ -59,7 +59,7 @@ async function handler(req, res) {
       if (!Number.isInteger(id)) {
         return res.status(400).json({ error: '삭제할 준비물 id가 필요합니다.' });
       }
-      await sql`DELETE FROM notes WHERE id = ${id}`;
+      await sql`DELETE FROM notes WHERE id = ${id} AND trip_id = ${req.tripId}`;
       return res.status(200).json({ ok: true });
     }
 

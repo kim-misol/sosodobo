@@ -95,7 +95,7 @@
       '<p class="rl-intro">앨범의 사진·영상을 찍은 시간 순서대로 이어서 보여줘요.</p>' +
       '<form class="rl-form" autocomplete="off">' +
       '<div class="rl-grid">' +
-      '<label>범위' + selectHtml('day', opts.day, [['all', '전체']].concat([1, 2, 3].map(function (d) {
+      '<label>범위' + selectHtml('day', opts.day, [['all', '전체']].concat(Array.from({ length: window.PhotoCore.LIMITS.tripDays }, function (_, i) { return i + 1; }).map(function (d) {
         var date = window.PhotoCore.formatDayDate(d, places().TRIP_START_DATE);
         return [d, d + '일차' + (date ? ' · ' + date : '')];
       }))) + '</label>' +

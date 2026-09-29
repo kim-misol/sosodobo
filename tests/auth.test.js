@@ -48,16 +48,16 @@ test('authConfig: 스위치와 필수 값이 모두 있어야 켜진다', () => 
   assert.equal(A.authConfig(ENV).enabled, true);
   assert.equal(A.authConfig(Object.assign({}, ENV, { AUTH_ENABLED: '' })).enabled, false, '스위치 꺼짐');
   assert.equal(A.authConfig(Object.assign({}, ENV, { SESSION_SECRET: 'short' })).enabled, false, '비밀값이 짧음');
-  assert.equal(A.authConfig(Object.assign({}, ENV, { TRIP_JOIN_CODE: '' })).enabled, false, '참여 코드 없음');
+  assert.equal(A.authConfig(Object.assign({}, ENV, { TRIP_JOIN_CODE: '' })).enabled, true, '참여 코드는 여행마다 DB 에 있어 환경변수는 선택');
   const onlyKakao = Object.assign({}, ENV, { GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '' });
   assert.deepEqual(A.authConfig(onlyKakao).providers, { google: false, kakao: true });
   assert.equal(A.authConfig(onlyKakao).enabled, true);
 });
 
-test('checkJoinCode: 앞뒤 공백·대소문자 무시, 코드가 없으면 항상 실패', () => {
-  assert.equal(A.checkJoinCode(' namhae2026 ', ENV), true);
-  assert.equal(A.checkJoinCode('namhae', ENV), false);
-  assert.equal(A.checkJoinCode('', Object.assign({}, ENV, { TRIP_JOIN_CODE: '' })), false);
+test('checkJoinCode: 앞뒤 공백·대소문자 무시, 기대 코드가 없으면 항상 실패', () => {
+  assert.equal(A.checkJoinCode(' namhae2026 ', 'Namhae2026'), true);
+  assert.equal(A.checkJoinCode('namhae', 'Namhae2026'), false);
+  assert.equal(A.checkJoinCode('', ''), false);
 });
 
 // ---- API 보호 -------------------------------------------------------------------
@@ -66,13 +66,15 @@ function memberSql(row) {
   return createFakeSql((text) => (text.includes('FROM users u LEFT JOIN travelers') ? { rows: row ? [row] : [] } : { rows: [] }));
 }
 
-test('findMember: 로그인 안 함 401, 참여 안 함 403, 참여자는 여행자 id', async () => {
+test('findMember: 로그인 안 함 401, 이 여행에 참여 안 함 403, 참여자는 여행자 id · 역할', async () => {
   const req = (cookie) => ({ headers: cookie ? { cookie } : {} });
-  assert.equal((await A.findMember(req(), memberSql(null), ENV)).status, 401);
-  assert.equal((await A.findMember(req(sessionCookie(3)), memberSql({ user_id: 3, traveler_id: null }), ENV)).code, 'join_required');
-  const ok = await A.findMember(req(sessionCookie(3)), memberSql({ user_id: 3, traveler_id: 5, traveler_name: '미솔' }), ENV);
-  assert.deepEqual(ok, { ok: true, userId: 3, travelerId: 5, travelerName: '미솔' });
-  assert.equal((await A.findMember(req(sessionCookie(3, 'y'.repeat(40))), memberSql({ user_id: 3, traveler_id: 5 }), ENV)).status, 401, '위조 쿠키');
+  assert.equal((await A.findMember(req(), memberSql(null), ENV, 1)).status, 401);
+  assert.equal((await A.findMember(req(sessionCookie(3)), memberSql({ user_id: 3, traveler_id: null }), ENV, 1)).code, 'join_required');
+  const sql = memberSql({ user_id: 3, traveler_id: 5, traveler_name: '미솔', role: 'admin' });
+  const ok = await A.findMember(req(sessionCookie(3)), sql, ENV, 7);
+  assert.deepEqual(ok, { ok: true, userId: 3, travelerId: 5, travelerName: '미솔', role: 'admin' });
+  assert.deepEqual(sql.calls[0].values, [7, 3], '그 여행(7)에서의 참여만 찾음');
+  assert.equal((await A.findMember(req(sessionCookie(3, 'y'.repeat(40))), memberSql({ user_id: 3, traveler_id: 5 }), ENV, 1)).status, 401, '위조 쿠키');
 });
 
 test('withMember: 로그인이 켜지면 요청의 travelerId 를 로그인한 사람으로 바꾼다', async () => {
@@ -173,37 +175,46 @@ test('콜백: state 가 다르면 로그인하지 않고 돌려보낸다', async
   });
 });
 
-function joinSql({ mine = [], free = [{ id: 3, name: '기아' }], claim = true } = {}) {
+function joinSql({ mine = [], free = [{ id: 3, name: '기아' }], claim = true, hasAdmin = true } = {}) {
   return createFakeSql((text) => {
+    if (text.includes('FROM trips WHERE lower(join_code) = lower(')) {
+      return { rows: [{ id: 7, title: '남해 바래길', join_code: 'Namhae2026', start_date: '2026-09-24', end_date: '2026-09-26' }] };
+    }
     if (text.startsWith('SELECT id, name FROM travelers WHERE user_id =')) return { rows: mine };
-    if (text.startsWith('SELECT id, name FROM travelers WHERE user_id IS NULL')) return { rows: free };
+    if (text.startsWith('SELECT id, name FROM travelers WHERE trip_id =')) return { rows: free };
+    if (text.startsWith("SELECT 1 FROM travelers WHERE trip_id = $ AND role = 'admin'")) return { rows: hasAdmin ? [{ ok: 1 }] : [] };
     if (text.startsWith('UPDATE travelers SET user_id')) return { rows: claim ? [{ id: 3, name: '기아' }] : [] };
     if (text.startsWith('INSERT INTO travelers')) return { rows: [{ id: 9, name: '수진' }] };
     return { rows: [] };
   });
 }
 
-test('여행 참여: 코드가 맞아야 목록을 보여 주고, 비어 있는 사람만 고를 수 있다', async () => {
+const TRIP_OUT = { id: 7, title: '남해 바래길', startDate: '2026-09-24', endDate: '2026-09-26' };
+
+test('여행 참여: 코드가 가리키는 여행에서, 비어 있는 사람만 고를 수 있다', async () => {
   await withEnv(ENV, async () => {
     const cookie = sessionCookie(42);
-    const bad = await call(loadHandler('auth.js', joinSql()), { method: 'POST', query: { action: 'join-options' }, body: { code: 'nope' }, headers: { cookie } });
+    const bad = await call(loadHandler('auth.js', createFakeSql()), { method: 'POST', query: { action: 'join-options' }, body: { code: 'nope' }, headers: { cookie } });
     assert.equal(bad.statusCode, 403);
     assert.equal(bad.body.code, 'bad_code');
     const anon = await call(loadHandler('auth.js', joinSql()), { method: 'POST', query: { action: 'join-options' }, body: { code: 'namhae2026' } });
     assert.equal(anon.statusCode, 401);
     const opts = await call(loadHandler('auth.js', joinSql()), { method: 'POST', query: { action: 'join-options' }, body: { code: 'namhae2026' }, headers: { cookie } });
-    assert.deepEqual(opts.body, { travelers: [{ id: 3, name: '기아' }] });
+    assert.deepEqual(opts.body, { trip: TRIP_OUT, travelers: [{ id: 3, name: '기아' }] });
 
     const sql = joinSql();
     const ok = await call(loadHandler('auth.js', sql), { method: 'POST', query: { action: 'join' }, body: { code: 'namhae2026', travelerId: 3 }, headers: { cookie } });
-    assert.deepEqual(ok.body, { traveler: { id: 3, name: '기아' } });
-    assert.ok(sql.calls.some((c) => c.text.includes('WHERE id = $ AND user_id IS NULL') && c.values[0] === 42 && c.values[1] === 3));
+    assert.deepEqual(ok.body, { trip: TRIP_OUT, traveler: { id: 3, name: '기아' } });
+    const claim = sql.calls.find((c) => c.text.startsWith('UPDATE travelers SET user_id'));
+    assert.deepEqual(claim.values, [42, 'member', 3, 7], '그 여행(7)의 3번 사람을, 관리자가 이미 있으니 일반 참여자로');
 
     const taken = await call(loadHandler('auth.js', joinSql({ claim: false })), { method: 'POST', query: { action: 'join' }, body: { code: 'namhae2026', travelerId: 3 }, headers: { cookie } });
     assert.equal(taken.statusCode, 409);
 
-    const fresh = await call(loadHandler('auth.js', joinSql()), { method: 'POST', query: { action: 'join' }, body: { code: 'namhae2026', name: ' 수진 ' }, headers: { cookie } });
+    const sql2 = joinSql({ hasAdmin: false });
+    const fresh = await call(loadHandler('auth.js', sql2), { method: 'POST', query: { action: 'join' }, body: { code: 'namhae2026', name: ' 수진 ' }, headers: { cookie } });
     assert.equal(fresh.statusCode, 201);
-    assert.deepEqual(fresh.body, { traveler: { id: 9, name: '수진' } });
+    assert.deepEqual(fresh.body, { trip: TRIP_OUT, traveler: { id: 9, name: '수진' } });
+    assert.deepEqual(sql2.calls.find((c) => c.text.startsWith('INSERT INTO travelers')).values, ['수진', 42, 7, 'admin'], '관리자가 없던 여행이면 관리자로');
   });
 });

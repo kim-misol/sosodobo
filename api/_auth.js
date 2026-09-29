@@ -1,7 +1,8 @@
 // 계정 로그인 공용 도구 (파일명이 _ 로 시작해 API 경로로 노출되지 않아요).
 //
 // - 세션: 서버 비밀값(SESSION_SECRET)으로 서명한 쿠키 하나 (DB 세션 테이블 없음). 30일 유지.
-// - 로그인은 환경변수가 모두 준비됐을 때만 켜져요 (AUTH_ENABLED=1 + SESSION_SECRET + TRIP_JOIN_CODE + Google 또는 카카오 키).
+// - 로그인은 환경변수가 모두 준비됐을 때만 켜져요 (AUTH_ENABLED=1 + SESSION_SECRET + Google 또는 카카오 키).
+//   여행 참여 코드는 여행마다 DB 에 있어요 (TRIP_JOIN_CODE 는 남해 여행을 옮길 때 초기값으로만 씀).
 //   준비 전에는 지금처럼 로그인 없이 동작하므로, 배포해도 아무도 잠기지 않아요.
 // - 켜지면 모든 API 는 "로그인 + 여행자와 연결된 계정"만 쓸 수 있고, 요청에 들어온 travelerId 는
 //   무시하고 로그인한 사람의 여행자 id 로 바꿔 씁니다 (다른 사람 이름으로 좋아요·댓글을 못 달게).
@@ -98,7 +99,7 @@ function providersConfigured(env) {
 function authConfig(env) {
   const e = env || process.env;
   const providers = providersConfigured(e);
-  const ready = !!(e.SESSION_SECRET && String(e.SESSION_SECRET).length >= 32 && e.TRIP_JOIN_CODE && (providers.google || providers.kakao));
+  const ready = !!(e.SESSION_SECRET && String(e.SESSION_SECRET).length >= 32 && (providers.google || providers.kakao));
   const flag = /^(1|true|yes|on)$/i.test(String(e.AUTH_ENABLED || ''));
   return { enabled: flag && ready, ready, flag, providers };
 }
@@ -107,11 +108,11 @@ function authEnabled(env) {
   return authConfig(env).enabled;
 }
 
-/** 여행 참여 코드 확인 (앞뒤 공백·대소문자 무시). */
-function checkJoinCode(input, env) {
-  const expected = String((env || process.env).TRIP_JOIN_CODE || '').trim().toLowerCase();
+/** 참여 코드 비교 (앞뒤 공백·대소문자 무시). 기대값이 비어 있으면 항상 실패. */
+function checkJoinCode(input, expected) {
+  const want = String(expected || '').trim().toLowerCase();
   const given = String(input || '').trim().toLowerCase();
-  return !!expected && safeEqual(given, expected);
+  return !!want && safeEqual(given, want);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,40 +160,95 @@ function normalizeBody(req) {
   if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) req.body = {};
 }
 
+/** 여행 행을 화면·검증에 쓰기 좋은 모양으로 (날짜는 'YYYY-MM-DD' 문자열, 일수 계산). */
+function tripInfo(row) {
+  if (!row) return null;
+  const start = Date.parse(row.start_date + 'T00:00:00Z');
+  const end = Date.parse(row.end_date + 'T00:00:00Z');
+  return {
+    id: row.id,
+    title: row.title,
+    summary: row.summary,
+    region: row.region,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    days: Math.round((end - start) / 86400000) + 1,
+    visibility: row.visibility,
+    membersCanEdit: row.members_can_edit,
+    coverUrl: row.cover_url,
+    legacyKey: row.legacy_key,
+  };
+}
+
 /**
- * 로그인한 사람의 여행자 정보. → { ok: true, userId, travelerId, travelerName }
- * 또는 { ok: false, status, code, error } (401 로그인 필요 / 403 여행 참여 필요).
+ * 요청이 가리키는 여행: ?trip= (또는 본문 tripId). 없으면 예전 주소 호환을 위해 처음 옮겨 온 남해 여행.
+ * 날짜는 DB 시간대에 흔들리지 않게 문자열로 꺼냅니다.
+ */
+async function loadTrip(req, sql) {
+  const raw = (req.query && req.query.trip) !== undefined ? req.query.trip : req.body && req.body.tripId;
+  let id = parseInt(raw, 10);
+  if (!Number.isInteger(id)) {
+    const meta = await sql`SELECT value FROM app_meta WHERE key = 'legacy_trip_id'`;
+    id = meta.rows.length ? parseInt(meta.rows[0].value, 10) : NaN;
+  }
+  if (!Number.isInteger(id)) return null;
+  const r = await sql`
+    SELECT id, title, summary, region, to_char(start_date, 'YYYY-MM-DD') AS start_date, to_char(end_date, 'YYYY-MM-DD') AS end_date,
+           visibility, members_can_edit, cover_url, legacy_key, join_code
+    FROM trips WHERE id = ${id}`;
+  return r.rows[0] || null;
+}
+
+/**
+ * 로그인한 사람이 이 여행에서 누구인지. → { ok: true, userId, travelerId, travelerName, role }
+ * 또는 { ok: false, status, code, error } (401 로그인 필요 / 403 이 여행에 참여 필요).
  * sql 은 테스트에서 바꿔 끼울 수 있게 인자로 받아요.
  */
-async function findMember(req, sql, env) {
+async function findMember(req, sql, env, tripId) {
   const uid = sessionUserId(req, env);
   if (!uid) return { ok: false, status: 401, code: 'login_required', error: '로그인이 필요해요.' };
   const r = await sql`
-    SELECT u.id AS user_id, t.id AS traveler_id, t.name AS traveler_name
-    FROM users u LEFT JOIN travelers t ON t.user_id = u.id
+    SELECT u.id AS user_id, t.id AS traveler_id, t.name AS traveler_name, t.role
+    FROM users u LEFT JOIN travelers t ON t.user_id = u.id AND t.trip_id = ${tripId}
     WHERE u.id = ${uid}`;
   if (!r.rows.length) return { ok: false, status: 401, code: 'login_required', error: '로그인이 필요해요.' };
   const row = r.rows[0];
   if (row.traveler_id === null || row.traveler_id === undefined) {
-    return { ok: false, status: 403, code: 'join_required', error: '여행에 참여한 뒤에 볼 수 있어요.' };
+    return { ok: false, status: 403, code: 'join_required', error: '이 여행에 참여한 뒤에 볼 수 있어요.' };
   }
-  return { ok: true, userId: uid, travelerId: Number(row.traveler_id), travelerName: row.traveler_name };
+  return { ok: true, userId: uid, travelerId: Number(row.traveler_id), travelerName: row.traveler_name, role: row.role || 'member' };
 }
 
 /**
- * API 핸들러 감싸기: 로그인이 켜져 있으면 여행 참여자만 통과시키고,
- * 요청의 travelerId · uploaderId 를 로그인한 사람의 여행자 id 로 바꿔 줍니다.
+ * API 핸들러 감싸기.
+ * - 요청이 가리키는 여행을 찾아 req.trip (tripInfo) · req.tripId 에 둡니다 (없으면 404).
+ * - 로그인이 켜져 있으면 그 여행의 참여자만 통과시키고, 요청의 travelerId · uploaderId 를
+ *   로그인한 사람의 여행자 id 로 바꿔 줍니다. opts.publicRead 인 GET 은 링크 공개 여행이면 누구나 읽기 가능.
  */
-function withMember(handler) {
+function withMember(handler, opts) {
+  const options = opts || {};
   return async function guarded(req, res) {
-    if (!authEnabled()) return handler(req, res);
+    // 여행과 상관없는 기능(업로드 준비 상태 확인 등)은 로그인이 꺼져 있으면 DB 없이 바로
+    if (options.tripOptionalWhenOpen && !authEnabled()) return handler(req, res);
     try {
-      const { sql } = require('./_db');
-      const m = await findMember(req, sql);
-      if (!m.ok) return res.status(m.status).json({ error: m.error, code: m.code });
+      const { sql, ensureSchema } = require('./_db');
+      await ensureSchema();
+      normalizeBody(req);
+      const row = await loadTrip(req, sql);
+      if (!row) return res.status(404).json({ error: '여행을 찾을 수 없어요.', code: 'no_trip' });
+      req.trip = tripInfo(row);
+      req.tripId = row.id;
+      if (!authEnabled()) return handler(req, res);
+      const m = await findMember(req, sql, undefined, row.id);
+      if (!m.ok) {
+        if (options.publicRead && req.method === 'GET' && row.visibility === 'link') {
+          req.member = null;
+          return handler(req, res);
+        }
+        return res.status(m.status).json({ error: m.error, code: m.code });
+      }
       req.member = m;
       req.query = Object.assign({}, req.query, { travelerId: String(m.travelerId) });
-      normalizeBody(req);
       if (req.method !== 'GET') {
         req.body.travelerId = m.travelerId;
         if (Object.prototype.hasOwnProperty.call(req.body, 'uploaderId')) req.body.uploaderId = m.travelerId;
@@ -203,6 +259,11 @@ function withMember(handler) {
       return res.status(500).json({ error: '로그인 정보를 확인하지 못했어요.' });
     }
   };
+}
+
+/** 로그인이 켜져 있을 때 관리자만 (꺼져 있으면 누구나). */
+function isAdmin(req) {
+  return !authEnabled() || !!(req.member && req.member.role === 'admin');
 }
 
 module.exports = {
@@ -224,5 +285,8 @@ module.exports = {
   clearOAuthState,
   findMember,
   withMember,
+  loadTrip,
+  tripInfo,
+  isAdmin,
   b64url,
 };

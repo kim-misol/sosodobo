@@ -39,6 +39,13 @@ function parseExpense(body) {
   return { value: { description, amount, payerId, participantIds } };
 }
 
+/** 결제자·참여자가 모두 이 여행 사람인지 (다른 여행 사람을 끼워 넣지 못하게). */
+async function allInTrip(tripId, ids) {
+  const uniq = [...new Set(ids)];
+  const r = await sql`SELECT COUNT(*) AS n FROM travelers WHERE trip_id = ${tripId} AND id = ANY(${uniq})`;
+  return Number(r.rows[0] && r.rows[0].n) === uniq.length;
+}
+
 // 참여자 분담 행을 채워 넣습니다.
 async function insertSplits(expenseId, participantIds) {
   for (const tid of participantIds) {
@@ -57,10 +64,13 @@ async function handler(req, res) {
       const parsed = parseExpense(readBody(req));
       if (parsed.error) return res.status(400).json({ error: parsed.error });
       const { description, amount, payerId, participantIds } = parsed.value;
+      if (!(await allInTrip(req.tripId, [payerId, ...participantIds]))) {
+        return res.status(400).json({ error: '이 여행에 없는 사람이 들어 있어요. 새로고침한 뒤 다시 시도해 주세요.' });
+      }
 
       const inserted = await sql`
-        INSERT INTO expenses (description, amount, payer_id)
-        VALUES (${description}, ${amount}, ${payerId})
+        INSERT INTO expenses (description, amount, payer_id, trip_id)
+        VALUES (${description}, ${amount}, ${payerId}, ${req.tripId})
         RETURNING id`;
       const expenseId = inserted.rows[0].id;
       await insertSplits(expenseId, participantIds);
@@ -76,11 +86,14 @@ async function handler(req, res) {
       const parsed = parseExpense(readBody(req));
       if (parsed.error) return res.status(400).json({ error: parsed.error });
       const { description, amount, payerId, participantIds } = parsed.value;
+      if (!(await allInTrip(req.tripId, [payerId, ...participantIds]))) {
+        return res.status(400).json({ error: '이 여행에 없는 사람이 들어 있어요. 새로고침한 뒤 다시 시도해 주세요.' });
+      }
 
       const updated = await sql`
         UPDATE expenses
         SET description = ${description}, amount = ${amount}, payer_id = ${payerId}
-        WHERE id = ${id}
+        WHERE id = ${id} AND trip_id = ${req.tripId}
         RETURNING id`;
       if (updated.rowCount === 0) {
         return res.status(404).json({ error: '해당 지출을 찾을 수 없어요.' });
@@ -97,7 +110,7 @@ async function handler(req, res) {
       if (!Number.isInteger(id)) {
         return res.status(400).json({ error: '삭제할 지출 id가 필요합니다.' });
       }
-      await sql`DELETE FROM expenses WHERE id = ${id}`;
+      await sql`DELETE FROM expenses WHERE id = ${id} AND trip_id = ${req.tripId}`;
       return res.status(200).json({ ok: true });
     }
 

@@ -40,9 +40,9 @@ async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const photo = await sql`SELECT 1 FROM photos WHERE id = ${photoId}`;
+      const photo = await sql`SELECT 1 FROM photos WHERE id = ${photoId} AND trip_id = ${req.tripId}`;
       if (photo.rowCount === 0) return res.status(404).json({ error: '해당 사진을 찾을 수 없어요.' });
-      const traveler = await sql`SELECT 1 FROM travelers WHERE id = ${travelerId}`;
+      const traveler = await sql`SELECT 1 FROM travelers WHERE id = ${travelerId} AND trip_id = ${req.tripId}`;
       if (traveler.rowCount === 0) return res.status(400).json({ error: '등록되지 않은 여행자예요.' });
       await sql`
         INSERT INTO photo_likes (photo_id, traveler_id) VALUES (${photoId}, ${travelerId})

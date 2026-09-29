@@ -62,6 +62,7 @@ async function handler(req, res) {
       const r = await sql`
         SELECT id, photo_id, author_id, content, created_at, updated_at
         FROM photo_comments WHERE photo_id = ${photoId}
+          AND photo_id IN (SELECT id FROM photos WHERE trip_id = ${req.tripId})
         ORDER BY created_at ASC, id ASC`;
       return res.status(200).json({ photoId, comments: r.rows.map(mapComment) });
     }
@@ -75,9 +76,9 @@ async function handler(req, res) {
       }
       const content = PhotoCore.validateComment(b.content);
       if (content.error) return res.status(400).json({ error: content.error });
-      const photo = await sql`SELECT 1 FROM photos WHERE id = ${photoId}`;
+      const photo = await sql`SELECT 1 FROM photos WHERE id = ${photoId} AND trip_id = ${req.tripId}`;
       if (photo.rowCount === 0) return res.status(404).json({ error: '해당 사진을 찾을 수 없어요.' });
-      const traveler = await sql`SELECT 1 FROM travelers WHERE id = ${travelerId}`;
+      const traveler = await sql`SELECT 1 FROM travelers WHERE id = ${travelerId} AND trip_id = ${req.tripId}`;
       if (traveler.rowCount === 0) return res.status(400).json({ error: '등록되지 않은 여행자예요.' });
       const r = await sql`
         INSERT INTO photo_comments (photo_id, author_id, content)
@@ -114,4 +115,4 @@ async function handler(req, res) {
 }
 
 // 로그인이 켜져 있으면 여행 참여자만, travelerId 는 로그인한 사람으로 (api/_auth.js)
-module.exports = withMember(handler);
+module.exports = withMember(handler, { publicRead: true });

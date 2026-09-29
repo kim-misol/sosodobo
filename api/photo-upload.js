@@ -77,4 +77,4 @@ async function handler(req, res) {
 }
 
 // 로그인이 켜져 있으면 여행 참여자만, travelerId 는 로그인한 사람으로 (api/_auth.js)
-module.exports = withMember(handler);
+module.exports = withMember(handler, { tripOptionalWhenOpen: true });

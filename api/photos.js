@@ -27,7 +27,7 @@ function readBody(req) {
   return req.body;
 }
 
-async function listPhotos() {
+async function listPhotos(tripId) {
   const result = await sql`
     SELECT p.*,
       (SELECT COUNT(*) FROM photo_likes l WHERE l.photo_id = p.id) AS like_count,
@@ -37,26 +37,27 @@ async function listPhotos() {
       ) AS liked_by,
       (SELECT COUNT(*) FROM photo_comments c WHERE c.photo_id = p.id) AS comment_count
     FROM photos p
+    WHERE p.trip_id = ${tripId}
     ORDER BY p.taken_at ASC NULLS LAST, p.id ASC`;
   return result.rows.map(mapPhotoRow);
 }
 
-async function travelerExists(id) {
-  const r = await sql`SELECT 1 FROM travelers WHERE id = ${id}`;
+async function travelerExists(id, tripId) {
+  const r = await sql`SELECT 1 FROM travelers WHERE id = ${id} AND trip_id = ${tripId}`;
   return r.rowCount > 0;
 }
 
-async function createPhoto(v) {
+async function createPhoto(v, tripId) {
   const camera = v.camera ? JSON.stringify(v.camera) : null;
   const result = await sql`
     INSERT INTO photos (
       uploader_id, media_type, url, thumb_url, width, height, duration_sec,
       caption, day, taken_at, taken_at_source, lat, lng, place_name, location_source,
-      original_taken_at, original_taken_at_source, original_lat, original_lng, camera
+      original_taken_at, original_taken_at_source, original_lat, original_lng, camera, trip_id
     ) VALUES (
       ${v.uploaderId}, ${v.mediaType}, ${v.url}, ${v.thumbUrl}, ${v.width}, ${v.height}, ${v.durationSec},
       ${v.caption}, ${v.day}, ${v.takenAt}, ${v.takenAtSource}, ${v.lat}, ${v.lng}, ${v.placeName}, ${v.locationSource},
-      ${v.originalTakenAt}, ${v.originalTakenAtSource}, ${v.originalLat}, ${v.originalLng}, ${camera}::jsonb
+      ${v.originalTakenAt}, ${v.originalTakenAtSource}, ${v.originalLat}, ${v.originalLng}, ${camera}::jsonb, ${tripId}
     )
     RETURNING *`;
   return mapPhotoRow(result.rows[0]);
@@ -72,13 +73,13 @@ async function findOwnedPhoto(req, travelerIdRaw, ownerOnly = true) {
   if (!Number.isInteger(id) || !Number.isInteger(travelerId)) {
     return { status: 400, error: '사진 id와 여행자 id가 필요합니다.' };
   }
-  const result = await sql`SELECT * FROM photos WHERE id = ${id}`;
+  const result = await sql`SELECT * FROM photos WHERE id = ${id} AND trip_id = ${req.tripId}`;
   if (result.rowCount === 0) return { status: 404, error: '해당 사진을 찾을 수 없어요.' };
   const row = result.rows[0];
   const isOwner = PhotoCore.canModify({ uploaderId: row.uploader_id }, travelerId);
   if (!isOwner) {
     if (ownerOnly) return { status: 403, error: '본인이 올린 사진만 바꿀 수 있어요.' };
-    if (!(await travelerExists(travelerId))) return { status: 403, error: '등록된 여행자만 고칠 수 있어요.' };
+    if (!(await travelerExists(travelerId, req.tripId))) return { status: 403, error: '등록된 여행자만 고칠 수 있어요.' };
   }
   return { row, travelerId, isOwner };
 }
@@ -89,29 +90,33 @@ async function handler(req, res) {
 
     if (req.method === 'GET') {
       const [photos, travelers] = await Promise.all([
-        listPhotos(),
-        sql`SELECT id, name FROM travelers ORDER BY id ASC`,
+        listPhotos(req.tripId),
+        sql`SELECT id, name FROM travelers WHERE trip_id = ${req.tripId} ORDER BY id ASC`,
       ]);
       return res.status(200).json({
         photos,
         travelers: travelers.rows.map((r) => ({ id: r.id, name: r.name })),
+        trip: req.trip,
+        me: req.member ? { travelerId: req.member.travelerId, role: req.member.role } : null,
       });
     }
 
     if (req.method === 'POST') {
-      const parsed = parsePhoto(readBody(req));
+      const parsed = parsePhoto(readBody(req), { tripStartDate: req.trip.startDate, tripDays: req.trip.days });
       if (parsed.error) return res.status(400).json({ error: parsed.error });
-      if (!(await travelerExists(parsed.value.uploaderId))) {
+      if (!(await travelerExists(parsed.value.uploaderId, req.tripId))) {
         return res.status(400).json({ error: '등록되지 않은 여행자예요. 여행자 목록을 확인해 주세요.' });
       }
-      return res.status(201).json(await createPhoto(parsed.value));
+      return res.status(201).json(await createPhoto(parsed.value, req.tripId));
     }
 
     if (req.method === 'PATCH') {
       const body = readBody(req);
       const found = await findOwnedPhoto(req, body.travelerId, false);
       if (found.error) return res.status(found.status).json({ error: found.error });
-      const parsed = parsePhotoPatch(body, mapPhotoRow(found.row), undefined, { isOwner: found.isOwner });
+      const parsed = parsePhotoPatch(body, mapPhotoRow(found.row), undefined, {
+        isOwner: found.isOwner, tripStartDate: req.trip.startDate, tripDays: req.trip.days,
+      });
       if (parsed.error) return res.status(parsed.status || 400).json({ error: parsed.error });
       const v = parsed.value;
       const result = await sql`
@@ -146,6 +151,6 @@ async function handler(req, res) {
 }
 
 // 로그인이 켜져 있으면 여행 참여자만, travelerId 는 로그인한 사람으로 (api/_auth.js)
-module.exports = withMember(handler);
+module.exports = withMember(handler, { publicRead: true });
 module.exports.findOwnedPhoto = findOwnedPhoto;
 module.exports.readBody = readBody;

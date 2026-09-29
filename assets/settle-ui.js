@@ -71,6 +71,7 @@
       state.travelers = data.travelers || [];
       state.expenses = data.expenses || [];
       state.notes = data.notes || [];
+      state.me = data.me || null; // 로그인이 켜져 있을 때 { travelerId, role }
       state.error = null;
     } catch (err) {
       state.error = err.message;
@@ -151,14 +152,21 @@
     }).join('');
   }
 
+  /** 사람 추가·빼기: 로그인이 꺼져 있으면 누구나, 켜져 있으면 여행 관리자만 */
+  function canManagePeople() {
+    return !state.me || state.me.role === 'admin';
+  }
+
   function renderTravelers() {
+    els.travelerForm.hidden = !canManagePeople();
     if (state.travelers.length === 0) {
       els.travelerList.innerHTML = '<p class="st-empty">아직 여행자가 없어요. 이름을 추가해 주세요.</p>';
       return;
     }
     els.travelerList.innerHTML = state.travelers.map(function (t) {
-      return '<span class="st-chip">' + esc(t.name) +
-        '<button type="button" class="st-chip-x" data-del-traveler="' + t.id + '" aria-label="' + esc(t.name) + ' 삭제">×</button></span>';
+      return '<span class="st-chip">' + esc(t.name) + (t.role === 'admin' ? ' 👑' : '') +
+        (canManagePeople() && !(t.role === 'admin' && t.hasAccount)
+          ? '<button type="button" class="st-chip-x" data-del-traveler="' + t.id + '" aria-label="' + esc(t.name) + ' 삭제">×</button>' : '') + '</span>';
     }).join('');
   }
 
@@ -472,12 +480,16 @@
     reload: load,
     addTraveler: addTraveler,
     deleteTraveler: deleteTraveler,
+    canManagePeople: canManagePeople,
     onChange: function (fn) { listeners.push(fn); },
   };
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  // 여행을 정한 뒤에 불러오기 시작 (trip-context.js). 없으면 바로.
+  // 링크로 구경하는 사람(참여 안 함)에게는 지출·정산·준비물을 불러오지 않아요.
+  var boot = function () {
+    if (!window.TripContext) { init(); return; }
+    window.TripContext.ready.then(function (t) { if (!t || t.isMember !== false) init(); });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();

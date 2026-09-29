@@ -16,6 +16,9 @@
 
   var API = 'api/auth';
   var AuthUI = { enabled: null, member: null, me: null };
+  var resolveReady;
+  /** 로그인 확인이 끝나 여행을 불러와도 될 때 (로그인이 꺼져 있거나, 로그인한 사람) → me */
+  AuthUI.ready = new Promise(function (r) { resolveReady = r; });
   window.AuthUI = AuthUI;
 
   function esc(s) {
@@ -33,12 +36,13 @@
   if (realFetch) {
     window.fetch = function (input, init) {
       return realFetch(input, init).then(function (res) {
-        if (AuthUI.enabled && (res.status === 401 || res.status === 403)) {
+        // 구경 중(링크 공개 · 참여 안 함)에는 참여자 전용 요청이 거절돼도 화면을 가리지 않아요.
+        if (AuthUI.enabled && !AuthUI.viewer && (res.status === 401 || res.status === 403)) {
           var url = typeof input === 'string' ? input : (input && input.url) || '';
           if (/(^|\/)api\//.test(url) && url.indexOf('api/auth') < 0) {
             res.clone().json().then(function (d) {
               if (d && d.code === 'login_required') showLogin();
-              else if (d && d.code === 'join_required') showJoin();
+              else if (d && d.code === 'join_required') AuthUI.showJoin({ back: '내 여행으로' });
             }).catch(function () { /* 본문 없음 */ });
           }
         }
@@ -118,7 +122,10 @@
 
   var joinState = { code: '', options: null, busy: false, error: null };
 
-  function showJoin() {
+  /** 참여 코드 → 이름 고르기. opts.tripTitle 이 있으면 "○○ 여행에 참여" 로 안내, opts.back 이면 "내 여행으로" 버튼 */
+  function showJoin(opts) {
+    if (opts) joinState.opts = opts;
+    var o = joinState.opts || {};
     var g = ensureGate();
     g.setAttribute('aria-label', '여행 참여');
     var who = AuthUI.me && AuthUI.me.user && AuthUI.me.user.name;
@@ -139,16 +146,51 @@
         '</fieldset><p class="auth-fine">한 번 고르면 좋아요 · 댓글 · 사진이 이 이름으로 남아요. 이미 다른 계정이 고른 이름은 목록에 없어요.</p>' +
         '<button type="submit" class="auth-primary"' + (joinState.busy ? ' disabled' : '') + '>' + (joinState.busy ? '저장 중…' : '이 이름으로 참여') + '</button></form>';
     }
-    g.innerHTML = '<div class="auth-card">' + brandHtml((who ? who + '님, ' : '') + '여행에 참여할 차례예요.') +
+    var title = joinState.trip ? joinState.trip.title : o.tripTitle;
+    g.innerHTML = '<div class="auth-card">' + brandHtml((who ? who + '님, ' : '') + (title ? '「' + title + '」에 참여할 차례예요.' : '여행에 참여할 차례예요.')) +
       (joinState.error ? '<p class="auth-err" role="alert">' + esc(joinState.error) + '</p>' : '') + body +
+      (o.back ? '<button type="button" class="auth-link" data-auth="back">' + esc(o.back) + '</button>' : '') +
       '<button type="button" class="auth-link" data-auth="logout">다른 계정으로 로그인</button></div>';
     reveal();
     var first = g.querySelector('input:not([type=radio]):not([hidden])');
     if (first && !joinState.options) first.focus();
   }
 
+  /** 로그인했지만 참여한 여행이 하나도 없을 때: 코드로 참여 / 새 여행 만들기 */
+  function showStart() {
+    var g = ensureGate();
+    g.setAttribute('aria-label', '여행 시작');
+    var who = AuthUI.me && AuthUI.me.user && AuthUI.me.user.name;
+    g.innerHTML = '<div class="auth-card">' + brandHtml((who ? who + '님, ' : '') + '아직 참여한 여행이 없어요.') +
+      '<div class="auth-buttons">' +
+      '<button type="button" class="auth-primary" data-auth="join">참여 코드로 여행에 참여</button>' +
+      '<button type="button" class="auth-sso google" data-auth="create">＋ 새 여행 만들기</button></div>' +
+      '<p class="auth-fine">친구가 만든 여행이면 참여 코드를, 내가 계획하는 여행이면 새로 만들어 주세요.</p>' +
+      '<button type="button" class="auth-link" data-auth="logout">다른 계정으로 로그인</button></div>';
+    reveal();
+  }
+
+  function showCreate() {
+    var g = ensureGate();
+    g.setAttribute('aria-label', '새 여행 만들기');
+    g.innerHTML = '<div class="auth-card">' + brandHtml('새 여행을 만들어요. 만든 사람이 관리자가 돼요.') +
+      (window.TripUI ? window.TripUI.formHtml(null) : '') +
+      '<button type="button" class="auth-link" data-auth="start">뒤로</button></div>';
+    reveal();
+    var first = g.querySelector('input');
+    if (first) first.focus();
+  }
+
   function onClick(e) {
     if (e.target.closest('[data-auth="logout"]')) { logout(); return; }
+    if (e.target.closest('[data-auth="join"]')) { joinState = { code: '', options: null, busy: false, error: null }; showJoin({ back: '뒤로' }); return; }
+    if (e.target.closest('[data-auth="create"]')) { showCreate(); return; }
+    if (e.target.closest('[data-auth="start"]')) { showStart(); return; }
+    if (e.target.closest('[data-auth="back"]')) {
+      if (AuthUI.viewer) { closeGate(); reveal(); return; }
+      if (AuthUI.me && AuthUI.me.tripCount) { location.href = location.pathname; } else { showStart(); }
+      return;
+    }
     var radio = e.target.closest('input[name="traveler"]');
     if (radio) {
       var nameInput = gate.querySelector('.auth-newname');
@@ -169,6 +211,7 @@
       showJoin();
       post('join-options', { code: joinState.code }).then(function (d) {
         joinState.options = d.travelers || [];
+        joinState.trip = d.trip || null;
       }).catch(function (err) {
         joinState.error = err.message;
       }).then(function () { joinState.busy = false; showJoin(); });
@@ -185,8 +228,8 @@
     }
     joinState.busy = true;
     showJoin();
-    post('join', body).then(function () {
-      location.reload();
+    post('join', body).then(function (d) {
+      location.href = location.pathname + '?trip=' + d.trip.id;
     }).catch(function (err) {
       joinState.busy = false;
       joinState.error = err.message;
@@ -210,7 +253,8 @@
   function renderNavAccount() {
     var box = document.getElementById('nav-account');
     if (!box || !AuthUI.member) return;
-    box.innerHTML = '<span class="nav-me">' + esc(AuthUI.member.traveler.name) + '</span>' +
+    var who = AuthUI.member.traveler ? AuthUI.member.traveler.name : (AuthUI.member.user.name || '');
+    box.innerHTML = '<span class="nav-me">' + esc(who) + '</span>' +
       '<button type="button" class="nav-logout" data-auth-logout>로그아웃</button>';
   }
 
@@ -237,13 +281,35 @@
     if (e.target.closest('[data-auth-logout]')) logout();
   });
 
-  function becomeMember(me) {
-    AuthUI.member = { user: me.user, traveler: me.traveler, linked: me.linked || [] };
+  /** 링크 공개 여행을 참여하지 않고 볼 때(로그인 전이거나, 로그인했지만 참여 안 함): 위쪽 안내 + 참여/로그인 버튼 */
+  AuthUI.enterViewer = function () {
+    AuthUI.viewer = true;
+    if (document.querySelector('.auth-viewer-bar')) return;
+    var loggedIn = !!(AuthUI.me && AuthUI.me.user);
+    var bar = document.createElement('div');
+    bar.className = 'auth-viewer-bar';
+    bar.innerHTML = '<span>링크로 구경하는 중이에요 · 지출·정산·준비물과 좋아요·댓글·올리기는 참여한 사람만</span>' +
+      '<button type="button" data-auth="' + (loggedIn ? 'viewer-join' : 'to-login') + '">' + (loggedIn ? '참여하기' : '로그인') + '</button>';
+    bar.addEventListener('click', function (e) {
+      if (e.target.closest('[data-auth="to-login"]')) showLogin();
+      if (e.target.closest('[data-auth="viewer-join"]')) AuthUI.showJoin({ back: '구경 계속하기' });
+    });
+    document.body.prepend(bar);
+  };
+
+  /** 지금 여행에서의 나 (trip-context.js 가 여행을 불러온 뒤 알려 줌). traveler 가 없으면 구경만(링크 공개). */
+  AuthUI.setMember = function (traveler) {
+    if (!AuthUI.enabled || !AuthUI.me || !AuthUI.me.user) return;
+    AuthUI.member = { user: AuthUI.me.user, linked: AuthUI.me.linked || [], traveler: traveler || null };
     closeGate();
     reveal();
     renderNavAccount();
-    document.dispatchEvent(new CustomEvent('sosodobo:auth', { detail: AuthUI.member }));
-  }
+    if (traveler) document.dispatchEvent(new CustomEvent('sosodobo:auth', { detail: AuthUI.member }));
+  };
+  AuthUI.showJoin = function (opts) { joinState = { code: '', options: null, busy: false, error: null }; showJoin(opts); };
+  AuthUI.showStart = showStart;
+  AuthUI.showLogin = function () { showLogin(); };
+  AuthUI.reveal = reveal;
 
   function start() {
     (realFetch || fetch)(API + '?action=me', { credentials: 'same-origin' })
@@ -252,11 +318,25 @@
       .then(function (me) {
         AuthUI.me = me;
         AuthUI.enabled = !!me.enabled;
-        if (!me.enabled) { reveal(); return; }
+        if (!me.enabled) { reveal(); resolveReady(me); return; }
         var err = takeLoginError();
-        if (!me.user) showLogin(err);
-        else if (!me.traveler) showJoin();
-        else becomeMember(me);
+        if (!me.user) {
+          // 로그인 전: 주소의 여행이 링크 공개면 구경(읽기)만 하게 두고, 아니면 로그인 화면
+          var m = /[?&]trip=(\d+)/.exec(location.search);
+          if (!m || err) { showLogin(err); return; }
+          (realFetch || fetch)('api/trips?id=' + m[1]).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+            .then(function (d) {
+              if (d && d.trip && d.trip.visibility === 'link') {
+                AuthUI.viewer = true; // 배너는 trip-context 가 여행을 불러온 뒤 enterViewer 로
+                reveal();
+                resolveReady(me);
+              } else {
+                showLogin();
+              }
+            });
+          return;
+        }
+        resolveReady(me);
       });
   }
 

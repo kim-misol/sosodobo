@@ -11,6 +11,8 @@
   'use strict';
 
   var SC = window.ShellCore;
+  // 주소에 처음부터 #탭이 있었는지 (없으면 여행을 불러온 뒤 그 여행 기준 처음 탭으로 바꿈)
+  var hashTabAtLoad = window.ShellCore ? window.ShellCore.tabFromHash(location.hash) : null;
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
   var scrollByTab = {};
   var els = {};
@@ -82,8 +84,8 @@
     var n = travelers().length;
     els.top.innerHTML = tab === 'profile'
       ? '<div class="m-top-title"><b>프로필</b><span>나와 내 여행</span></div>'
-      : '<div class="m-top-title"><b>' + esc(t.TRIP_TITLE || '우리 여행') + '</b><span>' +
-        esc(SC.dateRangeLabel(t.TRIP_START_DATE, tripDays())) + (n ? ' · ' + n + '명' : '') + '</span></div>';
+      : '<button type="button" class="m-top-title m-switch" data-m-switch aria-label="여행 바꾸기"><b>' + esc(t.TRIP_TITLE || '우리 여행') + '</b><span>' +
+        esc(SC.dateRangeLabel(t.TRIP_START_DATE, tripDays())) + (n ? ' · ' + n + '명' : '') + '</span></button>';
     els.tabbar.innerHTML = TABS.map(function (x) {
       if (x[0] === 'camera') {
         return '<button type="button" class="m-fab" data-m-upload aria-label="사진·영상 올리기">' + ICONS.camera + '</button>';
@@ -108,19 +110,22 @@
     var photos = {};
     photoState().photos.forEach(function (p) { photos[p.uploaderId] = (photos[p.uploaderId] || 0) + 1; });
 
+    var manage = !window.SettleUI || !window.SettleUI.canManagePeople || window.SettleUI.canManagePeople();
     var rows = list.length ? list.map(function (t) {
       var bits = [(photos[t.id] ? '사진 ' + photos[t.id] + '장' : '사진 없음'), (paid[t.id] ? '결제 ' + won(paid[t.id]) : '결제 없음')];
       return '<div class="m-person">' + avatar(t.id, t.name) +
-        '<div class="t"><b>' + esc(t.name) + (t.id === me ? ' <span class="m-chip">나</span>' : '') + '</b><span>' + bits.join(' · ') + '</span></div>' +
-        '<button type="button" class="m-textbtn" data-m-remove="' + t.id + '" aria-label="' + esc(t.name) + ' 여행에서 빼기">빼기</button></div>';
+        '<div class="t"><b>' + esc(t.name) + (t.id === me ? ' <span class="m-chip">나</span>' : '') +
+        (t.role === 'admin' ? ' <span class="m-chip line">관리자</span>' : '') + '</b><span>' + bits.join(' · ') + '</span></div>' +
+        (manage && !(t.role === 'admin' && t.hasAccount)
+          ? '<button type="button" class="m-textbtn" data-m-remove="' + t.id + '" aria-label="' + esc(t.name) + ' 여행에서 빼기">빼기</button>' : '') + '</div>';
     }).join('') : '<p class="m-empty">' + (s.loading ? '불러오는 중…' : '아직 등록된 사람이 없어요. 아래에서 이름을 추가해 주세요.') + '</p>';
 
     els.people.innerHTML =
       '<section class="m-block"><div class="m-block-head"><h2>함께 가는 사람 <span class="m-muted">' + list.length + '명</span></h2></div>' +
       '<div>' + rows + '</div>' +
-      '<form class="m-add" data-m-add autocomplete="off"><label class="m-sr" for="m-add-name">이름</label>' +
-      '<input id="m-add-name" name="name" maxlength="40" placeholder="이름 추가 (예: 수진)" required>' +
-      '<button type="submit">추가</button></form></section>' +
+      (manage ? '<form class="m-add" data-m-add autocomplete="off"><label class="m-sr" for="m-add-name">이름</label>' +
+        '<input id="m-add-name" name="name" maxlength="40" placeholder="이름 추가 (예: 수진)" required>' +
+        '<button type="submit">추가</button></form>' : '<p class="m-note" style="margin:8px 0 0">사람 추가·빼기는 여행 관리자만 할 수 있어요.</p>') + '</section>' +
       '<section class="m-block m-invite"><span class="m-invite-ico" aria-hidden="true">🔗</span><div><b>초대 링크로 부르기</b>' +
       '<span>링크를 받은 사람이 로그인하면 바로 합류 · 준비 중</span></div></section>' +
       '<p class="m-note">계정이 없어도 이름만으로 추가할 수 있어요. 지출 기록에 들어 있는 사람은 정산이 달라지기 때문에 뺄 수 없어요.</p>';
@@ -176,10 +181,11 @@
         '<p class="m-note">좋아요 · 댓글 · 사진 올리기는 여기서 고른 이름으로 남아요.</p>';
     els.profile.innerHTML = meBlock +
       '<section class="m-block"><div class="m-block-head"><h2>내 여행</h2></div>' +
-      '<div class="m-trip"><span class="m-trip-cover" aria-hidden="true"></span><div class="t"><b>' + esc(t.TRIP_TITLE || '우리 여행') +
-      ' <span class="m-chip">보는 중</span></b><span>' + esc(SC.dateRangeLabel(t.TRIP_START_DATE, tripDays())) + ' · ' + list.length + '명 · 사진 ' +
-      photoState().photos.length + '장</span><span><span class="m-chip line">' + chip + '</span></span></div></div>' +
-      '<p class="m-note" style="margin:10px 0 0">여러 여행 만들기 · 수정 · 삭제는 다음 단계에서 추가돼요.</p></section>' +
+      (window.TripUI && window.TripContext && window.TripContext.trips
+        ? window.TripUI.tripListHtml(window.TripContext.trips, 'manage')
+        : '<p class="m-empty">불러오는 중…</p>') +
+      '<div class="tui-actions" style="margin-top:10px"><button type="button" class="tui-btn primary" data-tui="create">＋ 새 여행 만들기</button>' +
+      (window.AuthUI && window.AuthUI.enabled ? '<button type="button" class="tui-btn" data-tui="join">참여 코드로 참여</button>' : '') + '</div></section>' +
       (auth ? window.AuthUI.logoutHtml() : '');
   }
 
@@ -187,6 +193,9 @@
   // 연결
   // ---------------------------------------------------------------------------
   function bind() {
+    els.top.addEventListener('click', function (e) {
+      if (e.target.closest('[data-m-switch]') && window.TripUI) window.TripUI.openSwitcher();
+    });
     els.tabbar.addEventListener('click', function (e) {
       if (e.target.closest('[data-m-upload]')) {
         setTab('photos');
@@ -222,6 +231,13 @@
     if (window.PhotoUI && window.PhotoUI.onChange) window.PhotoUI.onChange(refresh);
     if (window.SettleUI && window.SettleUI.onChange) window.SettleUI.onChange(refresh);
     document.addEventListener('sosodobo:auth', refresh);
+    // 여행을 불러오면: 주소에 #탭이 없으면 그 여행 기준 처음 탭(끝난 여행은 사진첩), 프로필의 여행 목록도 불러오기
+    document.addEventListener('sosodobo:trip', function (e) {
+      var t = e.detail;
+      if (!hashTabAtLoad) setTab(SC.defaultTab(SC.tripPhase(t.startDate, t.days, Date.now())), { keepScroll: true });
+      else refresh();
+      if (window.TripContext) window.TripContext.loadTrips().then(refresh);
+    });
     window.addEventListener('resize', function () {
       document.documentElement.style.setProperty('--m-top-h', els.top.offsetHeight + 'px');
     });

@@ -13,6 +13,8 @@
   setTimeout(function () { document.documentElement.classList.remove('auth-checking'); }, 4000);
 </script>
 <script src="assets/auth-ui.js"></script>
+<script src="assets/trip-core.js"></script>
+<script src="assets/trip-context.js"></script>
 <style>
   :root{
     --sea:#2f5233;
@@ -863,6 +865,79 @@
   .m-account-state.on{color:#2f7a4f;}
   .m-logout{border:0;background:none;color:#b5572b;font-size:14.5px;font-weight:700;cursor:pointer;font-family:inherit;padding:2px 0;}
 
+
+  /* =====================================================================
+     여러 여행 (trip-context.js · trip-ui.js)
+     ===================================================================== */
+  body:not([data-legacy="namhae"]) .legacy-only{display:none !important;}
+  body.trip-viewer #settle,body.trip-viewer .settle-intro,body.trip-viewer .cost-box,body.trip-viewer .ph-toolbar,
+  body.trip-viewer .m-fab,body.trip-viewer .m-add,body.trip-viewer [data-m-remove]{display:none !important;}
+  body[data-legacy="namhae"] .trip-days,body:not([data-legacy]) .trip-days{display:none !important;}
+  .trip-days{display:grid;gap:10px;margin:0 0 28px;}
+  .trip-day{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;}
+  .trip-day b{font-size:16px;}
+  .trip-day p{margin:0;color:var(--sub);font-size:13.5px;}
+  .trip-days-note{margin:0 4px;color:var(--sub);font-size:12.5px;}
+  .nav-trip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--ink);font-family:inherit;flex-shrink:0;}
+  .auth-viewer-bar{position:sticky;top:0;z-index:70;display:flex;align-items:center;gap:10px;justify-content:space-between;
+    background:var(--sea);color:#f5efdb;font-size:12.5px;padding:8px 14px;}
+  .auth-viewer-bar button{white-space:nowrap;flex:none;border:0;background:#f5efdb;color:var(--sea);border-radius:999px;padding:4px 12px;font-weight:700;cursor:pointer;font-family:inherit;}
+  body.tsheet-open{overflow:hidden;}
+  .tsheet-scrim{position:fixed;inset:0;z-index:250;background:rgba(20,19,16,.45);display:flex;align-items:center;justify-content:center;padding:20px;}
+  .tsheet{position:relative;width:100%;max-width:440px;max-height:88vh;overflow-y:auto;background:var(--card);border-radius:20px;padding:22px 20px 22px;
+    display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px -20px rgba(0,0,0,.4);}
+  .tsheet h2{margin:0;font-size:19px;padding-right:32px;text-wrap:balance;}
+  .tsheet-grab{display:none;}
+  .tsheet-x{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:50%;border:0;background:var(--sand);font-size:20px;cursor:pointer;color:var(--sub);}
+  .tui-sub{margin:0;color:var(--sub);font-size:13.5px;}
+  .tui-label{margin:6px 0 0;font-size:12px;color:var(--sub);font-weight:700;}
+  .tui-empty{margin:4px 0;color:var(--sub);font-size:13.5px;}
+  .tui-trip{display:flex;align-items:center;gap:6px;border-top:1px solid var(--line);}
+  .tui-trip:first-child{border-top:0;}
+  .tui-trip-main{flex:1;min-width:0;display:flex;gap:12px;align-items:center;border:0;background:none;padding:10px 0;text-align:left;cursor:pointer;font-family:inherit;color:inherit;}
+  .tui-cover{width:48px;height:48px;border-radius:12px;flex:none;background:linear-gradient(140deg,#8cb8c4,#2f5b6e);}
+  .tui-trip .t{display:flex;flex-direction:column;gap:2px;min-width:0;}
+  .tui-trip .t b{font-size:15px;}
+  .tui-trip .t > span{font-size:12.5px;color:var(--sub);font-variant-numeric:tabular-nums;}
+  .tui-more{border:0;background:none;font-size:20px;color:var(--sub);cursor:pointer;padding:6px 8px;}
+  .tui-chip{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:#e3ebdf;color:var(--sea);font-weight:700;vertical-align:1px;}
+  .tui-chip.accent{background:#f6e3d6;color:#b05f30;}
+  .tui-chip.line{background:transparent;border:1px solid var(--line);color:var(--sub);font-weight:500;}
+  .tui-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .tui-btn{flex:1;border:1px solid var(--line);background:var(--sand);border-radius:12px;padding:11px 14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--ink);}
+  .tui-btn.primary{background:var(--sea);border-color:var(--sea);color:#fff;}
+  .tui-btn.danger{background:#b5572b;border-color:#b5572b;color:#fff;}
+  .tui-btn:disabled{opacity:.6;}
+  .tui-form{display:flex;flex-direction:column;gap:12px;}
+  .tui-form > label,.tui-two label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--sub);font-weight:600;}
+  .tui-form em{color:#b5572b;font-style:normal;}
+  .tui-opt{font-weight:400;}
+  .tui-form input:not([type=radio]):not([type=checkbox]){border:1px solid var(--line);background:var(--sand);border-radius:10px;padding:10px 12px;font-size:16px;font-family:inherit;color:var(--ink);width:100%;min-width:0;}
+  .tui-two{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .tui-radios{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
+  .tui-radios legend{font-size:13px;color:var(--sub);font-weight:600;margin-bottom:5px;}
+  .tui-radios label,.tui-toggle{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;background:var(--sand);}
+  .tui-radios label:has(input:checked),.tui-toggle:has(input:checked){border-color:var(--sea);background:#e3ebdf;}
+  .tui-radios input,.tui-toggle input{accent-color:var(--sea);width:18px;height:18px;margin:2px 0 0;flex:none;}
+  .tui-radios span,.tui-toggle span{display:flex;flex-direction:column;gap:1px;font-size:12.5px;color:var(--sub);}
+  .tui-radios b,.tui-toggle b{font-size:14.5px;color:var(--ink);}
+  .tui-err{margin:0;background:#fbe6dd;color:#8a3413;border-radius:10px;padding:9px 12px;font-size:13.5px;}
+  .tui-menu{display:flex;flex-direction:column;}
+  .tui-menu button{border:0;border-top:1px solid var(--line);background:none;text-align:left;padding:13px 2px;font-size:15px;cursor:pointer;font-family:inherit;color:var(--ink);}
+  .tui-menu button:first-child{border-top:0;}
+  .tui-menu button.danger{color:#b5572b;}
+  .tui-code{display:flex;gap:8px;align-items:center;}
+  .tui-code output{flex:1;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:24px;font-weight:700;letter-spacing:.12em;background:var(--sand);border:1px dashed var(--line);border-radius:12px;padding:12px;text-align:center;}
+  .tui-code .tui-btn{flex:none;}
+  @media (max-width:767px){
+    .tsheet-scrim{align-items:flex-end;padding:0;}
+    .tsheet{max-width:none;border-radius:22px 22px 0 0;max-height:90vh;padding:10px 18px calc(env(safe-area-inset-bottom,0px) + 20px);}
+    .tsheet-grab{display:block;width:38px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 4px;}
+    .tsheet-x{top:12px;}
+    .m-top-title.m-switch{border:0;background:none;padding:0;text-align:left;cursor:pointer;font-family:inherit;color:inherit;}
+    .m-top-title.m-switch b::after{content:" ▾";font-size:13px;color:var(--sub);}
+  }
+
   /* =====================================================================
      폰 화면(폭 768px 미만): 앱 모양 — 위쪽 여행 바 + 하단 탭. PC 는 위의 스타일 그대로.
      어떤 요소가 어느 탭에 속하는지는 data-m, 지금 탭은 body[data-mtab].
@@ -1037,6 +1112,7 @@
     <a href="#settle">지출·정산</a>
     <a href="#notes">준비물</a>
   </div>
+  <button type="button" class="nav-trip" id="nav-trip" aria-label="여행 바꾸기 · 관리">여행 ▾</button>
   <div class="nav-account" id="nav-account"></div>
 </nav>
 
@@ -1062,7 +1138,10 @@
     </div>
   </div>
 
-  <div class="timeline" data-m="home">
+  <!-- 옛 남해 페이지가 아닌 여행: 여행 정보로 그리는 날짜 카드 (trip-context.js) -->
+  <div class="trip-days" id="trip-days" data-m="home"></div>
+
+  <div class="timeline legacy-only" data-m="home">
 
   <!-- DAY 1 -->
   <section class="day">
@@ -1308,7 +1387,7 @@
   </section>
 
   <!-- 참고: 숙소비 -->
-  <div class="cost-box" data-m="home">
+  <div class="cost-box legacy-only" data-m="home">
     <h2>🏠 숙소비 참고</h2>
     <div class="cost-row">
       <div>1일차 · 남해는, 지금<div class="who">기아 언니 포함 4인 분담</div></div>
@@ -1321,7 +1400,7 @@
     <p class="who" style="margin-top:10px">👇 아래 ‘지출 &amp; 정산’에 여행자와 지출을 입력하면 자동으로 정산돼요.</p>
   </div>
 
-  <div class="section-intro" data-m="home">
+  <div class="section-intro settle-intro" data-m="home">
     <span class="icon">💰</span>
     <div>
       <h2>지출 &amp; 정산</h2>
@@ -1408,6 +1487,7 @@
 <script src="assets/vendor/fix-webm-duration.js"></script>
 <script src="assets/reel-core.js"></script>
 <script src="assets/reel-ui.js"></script>
+<script src="assets/trip-ui.js"></script>
 <script src="assets/mobile-shell.js"></script>
 <script>
   document.querySelectorAll('.carousel').forEach(function (el) {

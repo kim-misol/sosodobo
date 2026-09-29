@@ -8,12 +8,28 @@ const DB_PATH = require.resolve(path.join(__dirname, '..', '..', 'api', '_db.js'
  * sql`...` 태그 함수를 흉내냅니다. 호출된 쿼리를 calls 에 쌓고,
  * responder(text, values) 가 돌려준 { rows } 를 결과로 씁니다.
  */
+/** 여행을 따로 정하지 않은 테스트가 쓰는 기본 여행 (withMember 가 찾아 req.trip 에 둠). */
+const DEFAULT_TRIP = {
+  id: 1, title: '남해 바래길', summary: '함께 걷는 3일 코스', region: '남해', start_date: '2026-09-24', end_date: '2026-09-26',
+  visibility: 'private', members_can_edit: true, cover_url: null, legacy_key: 'namhae', join_code: 'NAMHAE2026',
+};
+
+function isTripLookup(text) {
+  return text.startsWith("SELECT value FROM app_meta WHERE key = 'legacy_trip_id'") ||
+    (text.startsWith('SELECT id, title, summary, region, to_char(start_date') && text.includes('FROM trips WHERE id ='));
+}
+
 function createFakeSql(responder) {
   const calls = [];
   function sql(strings, ...values) {
     const text = strings.join('$').replace(/\s+/g, ' ').trim();
     calls.push({ text, values });
-    const out = (responder && responder(text, values)) || { rows: [] };
+    let out = responder && responder(text, values);
+    // 여행 찾기는 테스트가 따로 답하지 않으면 기본 여행으로
+    if (isTripLookup(text) && !(out && out.rows && out.rows.length)) {
+      out = text.includes('app_meta') ? { rows: [{ value: '1' }] } : { rows: [DEFAULT_TRIP] };
+    }
+    out = out || { rows: [] };
     const rows = out.rows || [];
     return Promise.resolve({ rows, rowCount: out.rowCount !== undefined ? out.rowCount : rows.length });
   }
@@ -33,6 +49,7 @@ function loadHandler(handlerFile, fakeSql, extraMocks) {
       sql: fakeSql,
       ensureSchema: async () => {},
       sendError: (res, err) => res.status(500).json({ error: err.message }),
+      randomJoinCode: () => 'TESTCODE',
     },
   };
   for (const [request, exportsValue] of Object.entries(extraMocks || {})) {
@@ -66,4 +83,4 @@ async function call(handler, reqInit) {
   return res;
 }
 
-module.exports = { createFakeSql, loadHandler, call };
+module.exports = { createFakeSql, loadHandler, call, DEFAULT_TRIP };

@@ -63,10 +63,11 @@ function parsePlaceName(raw) {
   return { value: clean };
 }
 
-function parseDay(raw) {
+function parseDay(raw, maxDays) {
   const day = toInt(raw);
   if (day === null) return { value: null };
-  if (!(day >= 1 && day <= LIMITS.tripDays)) return { error: '일차가 올바르지 않아요.' };
+  const max = Number.isInteger(maxDays) && maxDays > 0 ? maxDays : LIMITS.tripDays;
+  if (!(day >= 1 && day <= max)) return { error: '일차가 올바르지 않아요.' };
   return { value: day };
 }
 
@@ -86,9 +87,9 @@ function sanitizeCamera(raw) {
 }
 
 /** 촬영 시각 → n일차 (여행 첫날 기준, 한국 시간). 모르면 null. */
-function dayFromTakenAt(takenAt, tripStartDate) {
+function dayFromTakenAt(takenAt, tripStartDate, tripDays) {
   const start = tripStartDate === undefined ? TripPlaces.TRIP_START_DATE : tripStartDate;
-  return PhotoCore.suggestDay(takenAt, start, LIMITS.tripDays);
+  return PhotoCore.suggestDay(takenAt, start, Number.isInteger(tripDays) && tripDays > 0 ? tripDays : LIMITS.tripDays);
 }
 
 /** POST 본문의 original(파일에서 읽은 시각·위치). 없으면 전부 null. */
@@ -117,6 +118,7 @@ function parseOriginal(raw) {
 function parsePhoto(body, opts) {
   const b = body || {};
   const tripStartDate = opts && opts.tripStartDate;
+  const tripDays = opts && opts.tripDays;
 
   const uploaderId = toInt(b.uploaderId);
   if (!Number.isInteger(uploaderId)) return { error: '올린 사람을 선택해 주세요.' };
@@ -143,7 +145,7 @@ function parsePhoto(body, opts) {
   const caption = PhotoCore.validateCaption(b.caption);
   if (caption.error) return { error: caption.error };
 
-  const day = parseDay(b.day);
+  const day = parseDay(b.day, tripDays);
   if (day.error) return { error: day.error };
 
   const takenAt = toIsoOrNull(b.takenAt);
@@ -182,7 +184,7 @@ function parsePhoto(body, opts) {
       height,
       durationSec,
       caption: caption.value,
-      day: day.value !== null ? day.value : dayFromTakenAt(takenAt, tripStartDate),
+      day: day.value !== null ? day.value : dayFromTakenAt(takenAt, tripStartDate, tripDays),
       takenAt,
       takenAtSource,
       lat: loc.lat,
@@ -213,6 +215,7 @@ function has(obj, key) {
  */
 function parsePhotoPatch(body, current, nowMs, opts) {
   const tripStartDate = opts && opts.tripStartDate;
+  const tripDays = opts && opts.tripDays;
   // 시간·위치·일차는 여행자 누구나 고칠 수 있고, 캡션은 올린 사람만 (opts.isOwner === false 면 막음).
   const isOwner = !opts || opts.isOwner !== false;
   const b = body || {};
@@ -243,7 +246,7 @@ function parsePhotoPatch(body, current, nowMs, opts) {
   }
 
   if (has(b, 'day')) {
-    const day = parseDay(b.day);
+    const day = parseDay(b.day, tripDays);
     if (day.error) return { error: day.error };
     next.day = day.value;
   }
@@ -260,7 +263,7 @@ function parsePhotoPatch(body, current, nowMs, opts) {
   }
 
   if (!has(b, 'day') && next.takenAt !== (cur.takenAt || null)) {
-    const moved = dayFromTakenAt(next.takenAt, tripStartDate);
+    const moved = dayFromTakenAt(next.takenAt, tripStartDate, tripDays);
     if (moved !== null) next.day = moved;
   }
 
