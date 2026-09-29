@@ -1,5 +1,11 @@
 {
+  "regions": [
+    "sin1"
+  ],
   "rewrites": [
-    { "source": "/api/auth/:provider/callback", "destination": "/api/auth?action=callback&provider=:provider" }
+    {
+      "source": "/api/auth/:provider/callback",
+      "destination": "/api/auth?action=callback&provider=:provider"
+    }
   ]
 }

@@ -10,10 +10,20 @@ const { LIMITS } = require('../assets/photo-core.js');
 
 let schemaReady = null;
 
+// 표 구조를 바꿀 때마다 올려 주세요. DB 에 기록된 값과 같으면 아래의 표 만들기·옮기기(수십 번의 쿼리)를
+// 통째로 건너뛰어, 서버가 새로 뜰 때마다 드는 시간을 줄입니다.
+const SCHEMA_VERSION = '2026-09-30.1';
+
 // 테이블이 없으면 만듭니다. 최초 요청 때 한 번만 실행되도록 캐싱합니다.
 async function ensureSchema() {
   if (!schemaReady) {
     schemaReady = (async () => {
+      try {
+        const v = await sql`SELECT value FROM app_meta WHERE key = 'schema_version'`;
+        if (v.rows.length && v.rows[0].value === SCHEMA_VERSION) return; // 이미 최신
+      } catch {
+        // app_meta 가 아직 없는 새 DB → 아래에서 모두 만듦
+      }
       await sql`CREATE TABLE IF NOT EXISTS travelers (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
@@ -201,6 +211,9 @@ async function ensureSchema() {
       await backfillPhotoDays();
       await migrateLegacyTrip();
       await seedNamhaeItinerary();
+      await sql`
+        INSERT INTO app_meta (key, value) VALUES ('schema_version', ${SCHEMA_VERSION})
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`;
     })().catch((err) => {
       // 실패하면 다음 요청에서 다시 시도할 수 있게 캐시를 비웁니다.
       schemaReady = null;
