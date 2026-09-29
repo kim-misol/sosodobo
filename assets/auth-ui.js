@@ -95,6 +95,52 @@
     already_linked: '그 계정은 이미 다른 사람과 이어져 있어요.',
   };
 
+  // ---------------------------------------------------------------------------
+  // 초대 링크: ?trip=<id>&join=<참여 코드>[&as=<여행자 id>]
+  // 로그인하러 다녀와도 잊지 않도록 잠깐 저장해 두고, 로그인되면 바로 "이 여행에서 나는 누구" 화면으로.
+  // ---------------------------------------------------------------------------
+  var INVITE_KEY = 'sosodobo.invite';
+  var pendingInvite = null;
+  function takeInviteFromUrl() {
+    var q = new URLSearchParams(location.search);
+    var code = q.get('join');
+    if (!code) return;
+    pendingInvite = { trip: Number(q.get('trip')) || null, code: code, as: Number(q.get('as')) || null, at: Date.now() };
+    try { localStorage.setItem(INVITE_KEY, JSON.stringify(pendingInvite)); } catch (e) { /* 저장 못 해도 이번 방문에서는 기억 */ }
+    q.delete('join'); q.delete('as');
+    try { history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString() : '') + location.hash); } catch (e) { /* 무시 */ }
+  }
+  function readInvite() {
+    if (pendingInvite) return pendingInvite;
+    try {
+      var v = JSON.parse(localStorage.getItem(INVITE_KEY) || 'null');
+      if (v && v.code && Date.now() - v.at < 7 * 86400000) return v; // 일주일 안에 로그인한 경우만
+    } catch (e) { /* 무시 */ }
+    return null;
+  }
+  function clearInvite() {
+    pendingInvite = null;
+    try { localStorage.removeItem(INVITE_KEY); } catch (e) { /* 무시 */ }
+  }
+
+  /** 로그인한 사람이 초대 링크로 들어옴 → 코드 확인 후 바로 이름 고르기 */
+  function acceptInvite(inv) {
+    joinState = { code: inv.code, options: null, busy: true, error: null, preselect: inv.as, opts: { back: '나중에 하기' } };
+    showJoin();
+    post('join-options', { code: inv.code }).then(function (d) {
+      joinState.options = d.travelers || [];
+      joinState.trip = d.trip || null;
+      joinState.busy = false;
+      showJoin();
+    }).catch(function (err) {
+      if (err.code === 'already_joined') { clearInvite(); location.href = location.pathname + '?trip=' + inv.trip; return; }
+      clearInvite();
+      joinState = { code: '', options: null, busy: false, error: err.code === 'bad_code'
+        ? '초대 링크가 바뀌었거나 올바르지 않아요. 관리자에게 새 링크를 받거나, 참여 코드를 직접 입력해 주세요.' : err.message, opts: { back: '내 여행으로' } };
+      showJoin();
+    });
+  }
+
   function takeLoginError() {
     var m = /[?&]login=([a-z_]+)/.exec(location.search);
     if (!m) return null;
@@ -107,16 +153,18 @@
       '<h1>같이 걷고,<br>같이 남기는 여행</h1><p>' + esc(sub) + '</p></div>';
   }
 
-  function showLogin(errorText) {
+  function showLogin(errorText, note) {
     var p = (AuthUI.me && AuthUI.me.providers) || { google: true, kakao: true };
     var g = ensureGate();
     g.setAttribute('aria-label', '로그인');
     g.innerHTML = '<div class="auth-card">' + brandHtml('일정 · 정산 · 사진을 함께 보려면 로그인해 주세요.') +
       (errorText ? '<p class="auth-err" role="alert">' + esc(errorText) + '</p>' : '') +
+      (note ? '<p class="auth-note">' + esc(note) + '</p>' : '') +
       '<div class="auth-buttons">' +
       (p.google ? '<a class="auth-sso google" href="' + API + '?action=login&amp;provider=google">' + GOOGLE_G + 'Google로 계속하기</a>' : '') +
       (p.kakao ? '<a class="auth-sso kakao" href="' + API + '?action=login&amp;provider=kakao">' + KAKAO_BUBBLE + '카카오로 계속하기</a>' : '') +
-      '</div><p class="auth-fine">처음이면 계정이 바로 만들어지고, 여행 참여 코드를 한 번 입력해요.</p></div>';
+      '</div><p class="auth-fine">' + (note ? '처음이면 계정이 바로 만들어지고, 초대 링크로 들어와서 참여 코드는 입력하지 않아도 돼요.'
+        : '처음이면 계정이 바로 만들어지고, 여행 참여 코드를 한 번 입력해요.') + '</p></div>';
     reveal();
   }
 
@@ -139,7 +187,8 @@
       var list = joinState.options;
       body = '<form class="auth-form" data-join="pick" autocomplete="off"><fieldset><legend>이 여행에서 나는 누구예요?</legend>' +
         (list.length ? list.map(function (t, i) {
-          return '<label class="auth-pick"><input type="radio" name="traveler" value="' + t.id + '"' + (i === 0 ? ' required' : '') + '><span>' + esc(t.name) + '</span></label>';
+          return '<label class="auth-pick"><input type="radio" name="traveler" value="' + t.id + '"' + (i === 0 ? ' required' : '') +
+            (joinState.preselect === t.id ? ' checked' : '') + '><span>' + esc(t.name) + '</span></label>';
         }).join('') : '<p class="auth-fine">고를 수 있는 이름이 없어요. 아래에 새 이름을 적어 주세요.</p>') +
         '<label class="auth-pick"><input type="radio" name="traveler" value="new"' + (list.length ? '' : ' checked required') + '><span>목록에 없어요 · 새 이름으로 참여</span></label>' +
         '<input name="name" maxlength="40" placeholder="내 이름" class="auth-newname"' + (list.length ? ' hidden' : '') + (who ? ' value="' + esc(who) + '"' : '') + '>' +
@@ -187,6 +236,7 @@
     if (e.target.closest('[data-auth="create"]')) { showCreate(); return; }
     if (e.target.closest('[data-auth="start"]')) { showStart(); return; }
     if (e.target.closest('[data-auth="back"]')) {
+      clearInvite();
       if (AuthUI.viewer) { closeGate(); reveal(); return; }
       if (AuthUI.me && AuthUI.me.tripCount) { location.href = location.pathname; } else { showStart(); }
       return;
@@ -229,6 +279,7 @@
     joinState.busy = true;
     showJoin();
     post('join', body).then(function (d) {
+      clearInvite();
       location.href = location.pathname + '?trip=' + d.trip.id;
     }).catch(function (err) {
       joinState.busy = false;
@@ -343,7 +394,11 @@
         AuthUI.me = me;
         AuthUI.enabled = !!me.enabled;
         if (!me.enabled) { reveal(); resolveReady(me); return; }
+        takeInviteFromUrl();
         var err = takeLoginError();
+        var invite = readInvite();
+        if (!me.user && invite) { showLogin(err, '여행에 초대받았어요. 로그인하면 바로 참여할 수 있어요.'); return; }
+        if (me.user && invite) { acceptInvite(invite); return; }
         if (!me.user) {
           // 로그인 전: 주소의 여행이 링크 공개면 구경(읽기)만 하게 두고, 아니면 로그인 화면
           var m = /[?&]trip=(\d+)/.exec(location.search);

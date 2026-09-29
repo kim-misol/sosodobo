@@ -115,11 +115,17 @@
     photoState().photos.forEach(function (p) { photos[p.uploaderId] = (photos[p.uploaderId] || 0) + 1; });
 
     var manage = !window.SettleUI || !window.SettleUI.canManagePeople || window.SettleUI.canManagePeople();
+    // 초대 링크: 로그인이 켜져 있고, 참여 코드를 볼 수 있는 관리자만
+    var trip = window.TripContext && window.TripContext.trip;
+    var loginOn = !!(window.AuthUI && window.AuthUI.enabled);
+    var canInvite = loginOn && !!(trip && trip.joinCode) && !!window.TripUI;
     var rows = list.length ? list.map(function (t) {
       var bits = [(photos[t.id] ? '사진 ' + photos[t.id] + '장' : '사진 없음'), (paid[t.id] ? '결제 ' + won(paid[t.id]) : '결제 없음')];
       return '<div class="m-person">' + avatar(t.id, t.name) +
         '<div class="t"><b>' + esc(t.name) + (t.id === me ? ' <span class="m-chip">나</span>' : '') +
         (t.role === 'admin' ? ' <span class="m-chip line">관리자</span>' : '') + '</b><span>' + bits.join(' · ') + '</span></div>' +
+        (canInvite && t.hasAccount === false
+          ? '<button type="button" class="m-textbtn" data-m-invite-as="' + t.id + '" aria-label="' + esc(t.name) + '에게 보낼 초대 링크 복사">초대</button>' : '') +
         (manage && !(t.role === 'admin' && t.hasAccount)
           ? '<button type="button" class="m-textbtn" data-m-remove="' + t.id + '" aria-label="' + esc(t.name) + ' 여행에서 빼기">빼기</button>' : '') + '</div>';
     }).join('') : '<p class="m-empty">' + (s.loading ? '불러오는 중…' : '아직 등록된 사람이 없어요. 아래에서 이름을 추가해 주세요.') + '</p>';
@@ -127,15 +133,20 @@
     var addForm = manage ? '<form class="m-add" data-m-add autocomplete="off"><label class="m-sr" for="' + idPrefix + '-add-name">이름</label>' +
         '<input id="' + idPrefix + '-add-name" name="name" maxlength="40" placeholder="이름 추가 (예: 수진)" required>' +
         '<button type="submit">추가</button></form>' : '<p class="m-note" style="margin:8px 0 0">사람 추가·빼기는 여행 관리자만 할 수 있어요.</p>';
-    var invite = '<div class="m-invite"><span class="m-invite-ico" aria-hidden="true">🔗</span><div><b>초대 링크로 부르기</b>' +
-      '<span>링크를 받은 사람이 로그인하면 바로 합류 · 준비 중</span></div></div>';
+    var invite = !loginOn ? '' : canInvite
+      ? '<div class="m-invite on"><span class="m-invite-ico" aria-hidden="true">🔗</span><div><b>초대 링크로 부르기</b>' +
+        '<span>링크를 받은 사람이 로그인하면 코드 없이 바로 참여해요. 아직 계정이 없는 사람 옆 "초대"를 누르면 그 이름으로 참여하는 링크예요.</span>' +
+        '<div class="m-invite-btns"><button type="button" class="m-invite-btn primary" data-m-invite>링크 복사</button>' +
+        (navigator.share ? '<button type="button" class="m-invite-btn" data-m-share>공유하기</button>' : '') + '</div></div></div>'
+      : '<div class="m-invite"><span class="m-invite-ico" aria-hidden="true">🔗</span><div><b>초대 링크로 부르기</b>' +
+        '<span>초대 링크는 여행 관리자가 보낼 수 있어요.</span></div></div>';
     var note = '<p class="m-note">계정이 없어도 이름만으로 추가할 수 있어요. 지출 기록에 들어 있는 사람은 정산이 달라지기 때문에 뺄 수 없어요.</p>';
     if (compact) {
       return '<div class="pc-people-list">' + rows + '</div>' + addForm + '<div class="pc-people-foot">' + invite + note + '</div>';
     }
     return '<section class="m-block"><div class="m-block-head"><h2>함께 가는 사람 <span class="m-muted">' + list.length + '명</span></h2></div>' +
       '<div>' + rows + '</div>' + addForm + '</section>' +
-      '<section class="m-block">' + invite + '</section>' + note;
+      (invite ? '<section class="m-block">' + invite + '</section>' : '') + note;
   }
 
   function renderPeople() {
@@ -232,7 +243,15 @@
       });
       box.addEventListener('click', function (e) {
         var b = e.target.closest('[data-m-remove]');
-        if (b) removePerson(Number(b.getAttribute('data-m-remove')));
+        if (b) { removePerson(Number(b.getAttribute('data-m-remove'))); return; }
+        var trip = window.TripContext && window.TripContext.trip;
+        if (!trip || !trip.joinCode || !window.TripUI) return;
+        var inv = e.target.closest('[data-m-invite], [data-m-share], [data-m-invite-as]');
+        if (!inv) return;
+        var as = inv.hasAttribute('data-m-invite-as') ? Number(inv.getAttribute('data-m-invite-as')) : null;
+        var url = window.TripUI.inviteUrl(trip.id, trip.joinCode, as);
+        if (inv.hasAttribute('data-m-share')) window.TripUI.shareInvite(trip.title, url, inv);
+        else window.TripUI.copyText(url, inv);
       });
     });
     els.profile.addEventListener('change', function (e) {

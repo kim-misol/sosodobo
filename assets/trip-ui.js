@@ -195,8 +195,9 @@
       open('<h2>참여 코드</h2><p class="tui-sub">함께 가는 사람에게 이 코드를 알려 주세요. 로그인 → 코드 입력 → "이 여행에서 나는 누구" 고르기로 참여해요.</p>' +
         '<div class="tui-code"><output data-tui="code-value">' + esc(code) + '</output>' +
         '<button type="button" class="tui-btn" data-tui="copy">복사</button></div>' +
-        '<div class="tui-actions"><button type="button" class="tui-btn" data-tui="new-code" data-id="' + id + '">새 코드 만들기</button></div>' +
-        '<p class="tui-sub">새 코드를 만들면 예전 코드로는 더 이상 참여할 수 없어요 (이미 참여한 사람은 그대로).</p>', '참여 코드');
+        '<div class="tui-actions"><button type="button" class="tui-btn primary" data-tui="copy-invite" data-id="' + id + '" data-code="' + esc(code) + '">🔗 초대 링크 복사</button>' +
+        '<button type="button" class="tui-btn" data-tui="new-code" data-id="' + id + '">새 코드 만들기</button></div>' +
+        '<p class="tui-sub">초대 링크를 열면 코드를 입력하지 않아도 로그인 후 바로 참여해요. 새 코드를 만들면 예전 코드와 링크로는 더 이상 참여할 수 없어요 (이미 참여한 사람은 그대로).</p>', '참여 코드');
     }).catch(function (e) { alert(e.message); });
   }
 
@@ -207,6 +208,36 @@
       '<form class="tui-form" data-tui-delete="' + id + '" autocomplete="off"><label>확인을 위해 여행 이름을 입력해 주세요<input name="confirm" placeholder="' + esc(t.title) + '"></label>' +
       '<p class="tui-err" data-tui="err" role="alert" hidden></p>' +
       '<button type="submit" class="tui-btn danger">삭제</button></form>', '여행 삭제');
+  }
+
+  // ---------------------------------------------------------------------------
+  // 초대 링크 (참여 코드가 들어 있어서, 새 코드를 만들면 예전 링크는 더 이상 안 돼요)
+  // ---------------------------------------------------------------------------
+  function inviteUrl(tripId, code, asTravelerId) {
+    return location.origin + location.pathname + '?trip=' + tripId + '&join=' + encodeURIComponent(code) +
+      (asTravelerId ? '&as=' + asTravelerId : '');
+  }
+
+  /** 복사하고 버튼 글자로 알려 줌 (복사가 막힌 브라우저면 직접 복사할 수 있게 보여 줌) */
+  function copyText(text, btn) {
+    var done = function () {
+      if (!btn) return;
+      var before = btn.textContent;
+      btn.textContent = '복사됨 ✓';
+      setTimeout(function () { btn.textContent = before; }, 1800);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(function () { window.prompt('링크를 복사해 주세요', text); });
+    else window.prompt('링크를 복사해 주세요', text);
+  }
+
+  /** 휴대폰 공유창(카카오톡 등)으로 보내기. 안 되는 브라우저면 복사 */
+  function shareInvite(title, url, btn) {
+    if (navigator.share) {
+      navigator.share({ title: title + ' 초대', text: '「' + title + '」 여행에 초대할게요. 링크를 열고 로그인하면 바로 참여돼요.', url: url })
+        .catch(function () { /* 사용자가 닫음 */ });
+    } else {
+      copyText(url, btn);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -255,6 +286,8 @@
       var done = function () { b.textContent = '복사됨 ✓'; };
       if (navigator.clipboard) navigator.clipboard.writeText(v).then(done).catch(function () { window.prompt('코드를 복사해 주세요', v); });
       else window.prompt('코드를 복사해 주세요', v);
+    } else if (a === 'copy-invite') {
+      copyText(inviteUrl(id, sheet.querySelector('[data-tui="code-value"]').textContent || b.getAttribute('data-code')), b);
     } else if (a === 'new-code') {
       if (!confirm('새 코드를 만들까요? 예전 코드로는 더 이상 참여할 수 없어요.')) return;
       api('POST', 'api/trips?id=' + id + '&part=join-code').then(function (d) {
@@ -270,6 +303,9 @@
     openManage: openManage,
     formHtml: formHtml,
     tripListHtml: tripListHtml,
+    inviteUrl: inviteUrl,
+    copyText: copyText,
+    shareInvite: shareInvite,
     close: close,
   };
 })();

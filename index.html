@@ -902,6 +902,11 @@
   .pc-people-list .m-person:first-child{border-top:0;}
   .pc-people-foot{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
   .pc-people .m-note{margin:0;}
+  .m-invite.on{opacity:1;align-items:flex-start;}
+  .m-invite .m-invite-btns{display:flex;flex-direction:row;gap:8px;margin-top:8px;flex-wrap:wrap;}
+  .m-invite-btn{border:1px solid var(--line);background:var(--sand);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--ink);}
+  .m-invite-btn.primary{background:var(--sea);border-color:var(--sea);color:#fff;}
+  .m-person .m-textbtn + .m-textbtn{margin-left:4px;}
 
   /* =====================================================================
      로그인 (auth-ui.js) — PC · 폰 공통
@@ -923,6 +928,7 @@
   .auth-sso:focus-visible,.auth-primary:focus-visible,.auth-link:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
   .auth-fine{margin:0;font-size:12.5px;color:var(--sub);text-align:center;}
   .auth-err{margin:0;background:#fbe6dd;color:#8a3413;border-radius:10px;padding:10px 12px;font-size:13.5px;}
+  .auth-note{margin:0;background:#e3ebdf;color:var(--sea);border-radius:10px;padding:10px 12px;font-size:13.5px;font-weight:600;}
   .auth-form{display:flex;flex-direction:column;gap:10px;}
   .auth-form > label{font-size:13px;color:var(--sub);font-weight:600;}
   .auth-form input:not([type=radio]){border:1px solid var(--line);background:var(--card);border-radius:12px;padding:12px 14px;font-size:16px;font-family:inherit;color:var(--ink);width:100%;}
