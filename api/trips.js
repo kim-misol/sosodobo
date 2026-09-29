@@ -17,6 +17,9 @@
 //   PATCH  ?id=5&part=lodging&lodging=3 { …같은 값 전체 }  ·  DELETE ?id=5&part=lodging&lodging=3
 //          addExpense 면 숙소비 지출(설명 "숙소 · 이름", 나눠 내는 사람 = 함께 묵는 사람)을 만들고 같이 고침.
 //          끄거나 숙소를 지우면 연결된 지출도 지움 (화면에서 먼저 경고)
+//   POST   ?id=5&part=day-photo&day=2 { url, thumbUrl, width, height, caption } → 미리보기 사진 등록 (하루 10장)
+//   PATCH  ?id=5&part=day-photo&photo=4 { caption }  ·  DELETE ?id=5&part=day-photo&photo=4 (파일도 정리)
+//   POST   ?id=5&part=day-photo-move&photo=4 { dir: -1|1 }
 const { del } = require('@vercel/blob');
 const { sql, ensureSchema, sendError, randomJoinCode } = require('./_db');
 const A = require('./_auth');
@@ -182,6 +185,54 @@ async function handleLodging(req, res, trip, b) {
   return res.status(req.method === 'POST' ? 201 : 200).json(await loadItinerary(trip));
 }
 
+// ---- 미리보기 사진 --------------------------------------------------------------------
+/** 저장소(Blob)에 올린 파일만 지움 (옮겨 온 assets/ 사진은 사이트 파일이라 그대로) */
+async function removeBlobFiles(urls) {
+  const blobUrls = urls.filter((u) => typeof u === 'string' && /^https:\/\/[^/]+\.blob\.vercel-storage\.com\//.test(u));
+  if (!blobUrls.length) return;
+  try { await del([...new Set(blobUrls)], { token: findBlobToken(process.env) || undefined }); } catch (err) { console.error('Blob 파일 삭제 실패', err); }
+}
+
+async function handleDayPhoto(req, res, trip, b, part) {
+  if (part === 'day-photo' && req.method === 'POST') {
+    const dayNo = parseInt(req.query.day, 10);
+    if (!(dayNo >= 1 && dayNo <= trip.days)) return res.status(400).json({ error: '날짜가 여행 기간 밖이에요.' });
+    const dayId = await ensureDay(trip.id, dayNo);
+    const count = await sql`SELECT COUNT(*) AS n, COALESCE(MAX(position), 0) AS maxpos FROM day_photos WHERE day_id = ${dayId}`;
+    const parsed = I.validateDayPhoto(b, trip.id, Number(count.rows[0].n));
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const v = parsed.value;
+    await sql`
+      INSERT INTO day_photos (day_id, position, url, thumb_url, caption, width, height)
+      VALUES (${dayId}, ${Number(count.rows[0].maxpos) + 1}, ${v.url}, ${v.thumbUrl}, ${v.caption}, ${v.width}, ${v.height})`;
+    return res.status(201).json(await loadItinerary(trip));
+  }
+  const photoId = parseInt(req.query.photo, 10);
+  if (!Number.isInteger(photoId)) return res.status(400).json({ error: '사진 id가 필요합니다.' });
+  const found = await sql`
+    SELECT p.* FROM day_photos p JOIN trip_days d ON d.id = p.day_id WHERE p.id = ${photoId} AND d.trip_id = ${trip.id}`;
+  const photo = found.rows[0];
+  if (!photo) return res.status(404).json({ error: '이 여행에 없는 사진이에요.' });
+  if (part === 'day-photo' && req.method === 'PATCH') {
+    const caption = String(b.caption === null || b.caption === undefined ? '' : b.caption).trim();
+    if (caption.length > I.PREVIEW.captionMax) return res.status(400).json({ error: '사진 설명은 ' + I.PREVIEW.captionMax + '자 이하로 입력해 주세요.' });
+    await sql`UPDATE day_photos SET caption = ${caption || null} WHERE id = ${photoId}`;
+    return res.status(200).json(await loadItinerary(trip));
+  }
+  if (part === 'day-photo' && req.method === 'DELETE') {
+    await sql`DELETE FROM day_photos WHERE id = ${photoId}`;
+    await removeBlobFiles([photo.url, photo.thumb_url]);
+    return res.status(200).json(await loadItinerary(trip));
+  }
+  if (part === 'day-photo-move' && req.method === 'POST') {
+    const siblings = await sql`SELECT id, position FROM day_photos WHERE day_id = ${photo.day_id}`;
+    const changes = I.moveItem(siblings.rows, photoId, Number(b.dir));
+    for (const c of changes) await sql`UPDATE day_photos SET position = ${c.position} WHERE id = ${c.id}`;
+    return res.status(200).json(await loadItinerary(trip));
+  }
+  return res.status(400).json({ error: '알 수 없는 요청이에요.' });
+}
+
 const ITEM_COLUMNS = {
   name: 'name', subtitle: 'subtitle', fromPlace: 'from_place', toPlace: 'to_place', distanceKm: 'distance_km',
   durationText: 'duration_text', difficulty: 'difficulty', mode: 'mode', timing: 'timing',
@@ -209,6 +260,7 @@ async function handleItinerary(req, res, row, ctx) {
   const b = readBody(req);
 
   if (part === 'lodging') return handleLodging(req, res, trip, b);
+  if (part === 'day-photo' || part === 'day-photo-move') return handleDayPhoto(req, res, trip, b, part);
 
   if (part === 'day' && req.method === 'PATCH') {
     const dayNo = parseInt(req.query.day, 10);
@@ -347,7 +399,7 @@ async function handler(req, res) {
     const admin = !on || row.role === 'admin';
 
     // ---- 날짜별 일정 ----
-    if (['itinerary', 'day', 'item', 'item-move', 'lodging'].indexOf(part) >= 0) {
+    if (['itinerary', 'day', 'item', 'item-move', 'lodging', 'day-photo', 'day-photo-move'].indexOf(part) >= 0) {
       return handleItinerary(req, res, row, { on, uid, member, admin, canEdit: member && (admin || row.members_can_edit) });
     }
 
@@ -408,11 +460,10 @@ async function handler(req, res) {
     // ---- 삭제 ----
     if (req.method === 'DELETE') {
       const files = await sql`SELECT url, thumb_url FROM photos WHERE trip_id = ${id}`;
+      const previews = await sql`
+        SELECT p.url, p.thumb_url FROM day_photos p JOIN trip_days d ON d.id = p.day_id WHERE d.trip_id = ${id}`;
       await sql`DELETE FROM trips WHERE id = ${id}`;
-      const urls = files.rows.flatMap((f) => [f.url, f.thumb_url]).filter(Boolean);
-      if (urls.length) {
-        try { await del(urls, { token: findBlobToken(process.env) || undefined }); } catch (err) { console.error('Blob 파일 삭제 실패', err); }
-      }
+      await removeBlobFiles(files.rows.concat(previews.rows).flatMap((f) => [f.url, f.thumb_url]));
       return res.status(200).json({ ok: true });
     }
 

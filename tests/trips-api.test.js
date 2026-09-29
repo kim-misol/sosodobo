@@ -101,10 +101,15 @@ test('DELETE /api/trips: 관리자만, 사진 파일도 정리 · 나가기는 �
   await withEnv(ENV, async () => {
     const deleted = [];
     const b = { del: async (urls) => { deleted.push(...urls); } };
-    const sql = sqlFor(tripRow({ role: 'admin' }), (text) => (text.startsWith('SELECT url, thumb_url FROM photos') ? { rows: [{ url: 'u1', thumb_url: 't1' }] } : null));
+    const U = 'https://abc.public.blob.vercel-storage.com/';
+    const sql = sqlFor(tripRow({ role: 'admin' }), (text) => {
+      if (text.startsWith('SELECT url, thumb_url FROM photos')) return { rows: [{ url: U + 'photos/1.jpg', thumb_url: U + 'photos/thumbs/1.jpg' }] };
+      if (text.includes('FROM day_photos p JOIN trip_days d')) return { rows: [{ url: U + 'trips/5/preview/2.jpg', thumb_url: U + 'trips/5/preview/2-t.jpg' }, { url: 'assets/map03.png', thumb_url: 'assets/map03.png' }] };
+      return null;
+    });
     const res = await call(loadHandler('trips.js', sql, { '@vercel/blob': b }), { method: 'DELETE', query: { id: '5' }, headers: { cookie: cookie(3) } });
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(deleted, ['u1', 't1']);
+    assert.deepEqual(deleted, [U + 'photos/1.jpg', U + 'photos/thumbs/1.jpg', U + 'trips/5/preview/2.jpg', U + 'trips/5/preview/2-t.jpg'], '사이트 파일(assets/)은 지우지 않음');
     assert.ok(sql.calls.some((c) => c.text.startsWith('DELETE FROM trips')));
     const leaveAdmin = await call(loadHandler('trips.js', sqlFor(tripRow({ role: 'admin' })), { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'leave' }, headers: { cookie: cookie(3) } });
     assert.equal(leaveAdmin.statusCode, 409);
@@ -286,4 +291,52 @@ test('지출 API: 숙소와 연결된 지출은 정산 화면에서 고치거나
   assert.equal(res.body.code, 'lodging_expense');
   const res2 = await call(loadHandler('expenses.js', sql), { method: 'PATCH', query: { id: '77' }, body: { description: 'x', amount: 1, payerId: 2, participantIds: [2] } });
   assert.equal(res2.statusCode, 409);
+});
+
+// ---- 미리보기 사진 ------------------------------------------------------------------
+
+const PV = 'https://abc.public.blob.vercel-storage.com/trips/5/preview/';
+function photoSql(row, opts) {
+  const o = opts || {};
+  return itinerarySql(row, (text) => {
+    if (text.startsWith('SELECT COUNT(*) AS n, COALESCE(MAX(position), 0) AS maxpos FROM day_photos')) return { rows: [{ n: String(o.count || 0), maxpos: String(o.count || 0) }] };
+    if (text.startsWith('SELECT p.* FROM day_photos p JOIN trip_days d')) return { rows: o.photo ? [o.photo] : [] };
+    if (text.startsWith('SELECT id, position FROM day_photos WHERE day_id')) return { rows: o.siblings || [] };
+    return null;
+  });
+}
+
+test('미리보기 사진: 등록 · 하루 10장 · 다른 여행 파일 거절 · 편집 권한', async () => {
+  await withEnv(ENV, async () => {
+    const body = { url: PV + '1-ab.jpg', thumbUrl: PV + '1-ab-t.jpg', width: 1600, height: 1200, caption: '창선대교' };
+    const sql = photoSql(tripRow(), { count: 2 });
+    const ok = await call(loadHandler('trips.js', sql, { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'day-photo', day: '1' }, headers: { cookie: cookie(3) }, body });
+    assert.equal(ok.statusCode, 201);
+    assert.deepEqual(sql.calls.find((c) => c.text.startsWith('INSERT INTO day_photos')).values, [70, 3, PV + '1-ab.jpg', PV + '1-ab-t.jpg', '창선대교', 1600, 1200]);
+    const full = await call(loadHandler('trips.js', photoSql(tripRow(), { count: 10 }), { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'day-photo', day: '1' }, headers: { cookie: cookie(3) }, body });
+    assert.match(full.body.error, /10장/);
+    const other = await call(loadHandler('trips.js', photoSql(tripRow()), { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'day-photo', day: '1' }, headers: { cookie: cookie(3) }, body: Object.assign({}, body, { url: body.url.replace('/trips/5/', '/trips/6/') }) });
+    assert.match(other.body.error, /주소/);
+    const locked = await call(loadHandler('trips.js', photoSql(tripRow({ members_can_edit: false })), { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'day-photo', day: '1' }, headers: { cookie: cookie(3) }, body });
+    assert.equal(locked.statusCode, 403);
+  });
+});
+
+test('미리보기 사진: 지우면 저장소 파일도 정리 · 순서 바꾸기 · 설명 고치기', async () => {
+  await withEnv(ENV, async () => {
+    const deleted = [];
+    const b = { del: async (urls) => { deleted.push(...urls); } };
+    const photo = { id: 4, day_id: 70, url: PV + '1-ab.jpg', thumb_url: PV + '1-ab-t.jpg' };
+    const del = await call(loadHandler('trips.js', photoSql(tripRow(), { photo }), { '@vercel/blob': b }), { method: 'DELETE', query: { id: '5', part: 'day-photo', photo: '4' }, headers: { cookie: cookie(3) } });
+    assert.equal(del.statusCode, 200);
+    assert.deepEqual(deleted, [PV + '1-ab.jpg', PV + '1-ab-t.jpg']);
+    const sql = photoSql(tripRow(), { photo, siblings: [{ id: 3, position: 1 }, { id: 4, position: 2 }] });
+    await call(loadHandler('trips.js', sql, { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'day-photo-move', photo: '4' }, headers: { cookie: cookie(3) }, body: { dir: -1 } });
+    assert.deepEqual(sql.calls.filter((c) => c.text.startsWith('UPDATE day_photos SET position')).map((c) => c.values), [[1, 4], [2, 3]]);
+    const sql2 = photoSql(tripRow(), { photo });
+    await call(loadHandler('trips.js', sql2, { '@vercel/blob': blob }), { method: 'PATCH', query: { id: '5', part: 'day-photo', photo: '4' }, headers: { cookie: cookie(3) }, body: { caption: ' 노을 ' } });
+    assert.deepEqual(sql2.calls.find((c) => c.text.startsWith('UPDATE day_photos SET caption')).values, ['노을', 4]);
+    const missing = await call(loadHandler('trips.js', photoSql(tripRow()), { '@vercel/blob': blob }), { method: 'DELETE', query: { id: '5', part: 'day-photo', photo: '99' }, headers: { cookie: cookie(3) } });
+    assert.equal(missing.statusCode, 404);
+  });
 });

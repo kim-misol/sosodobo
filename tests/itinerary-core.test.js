@@ -166,3 +166,24 @@ test('parseWon: 쉼표 · 원 · 만 단위', () => {
   assert.ok(Number.isNaN(I.parseWon('십칠만')));
   assert.equal(I.validateLodging({ name: 'a', checkIn: '2026-09-24', cost: '30만' }, ctx).value.cost, 300000);
 });
+
+// ---- 미리보기 사진 ------------------------------------------------------------------
+
+const B = 'https://abc123.public.blob.vercel-storage.com';
+
+test('isPreviewUrl: 이 여행의 trips/<id>/preview/ 파일만', () => {
+  assert.equal(I.isPreviewUrl(B + '/trips/5/preview/1-ab.jpg', 5), true);
+  assert.equal(I.isPreviewUrl(B + '/trips/6/preview/1-ab.jpg', 5), false, '다른 여행');
+  assert.equal(I.isPreviewUrl(B + '/photos/1-ab.jpg', 5), false, '앨범 경로');
+  assert.equal(I.isPreviewUrl('https://evil.example.com/trips/5/preview/1.jpg', 5), false);
+  assert.equal(I.isPreviewUrl('assets/day2-carousel/slide-01.jpg', 5), false);
+});
+
+test('validateDayPhoto: 하루 10장 · 주소 · 설명 길이', () => {
+  const ok = I.validateDayPhoto({ url: B + '/trips/5/preview/1-ab.jpg', thumbUrl: B + '/trips/5/preview/1-ab-t.jpg', caption: ' 창선대교 ', width: 1600, height: 1200 }, 5, 3);
+  assert.deepEqual(ok.value, { url: B + '/trips/5/preview/1-ab.jpg', thumbUrl: B + '/trips/5/preview/1-ab-t.jpg', caption: '창선대교', width: 1600, height: 1200 });
+  assert.match(I.validateDayPhoto({ url: B + '/trips/5/preview/1.jpg' }, 5, 10).error, /10장/);
+  assert.match(I.validateDayPhoto({ url: B + '/trips/9/preview/1.jpg' }, 5, 0).error, /주소/);
+  assert.match(I.validateDayPhoto({ url: B + '/trips/5/preview/1.jpg', caption: 'x'.repeat(101) }, 5, 0).error, /100자/);
+  assert.equal(I.previewPath(5, 'thumb', 1700000000000, 'a/b!c'), 'trips/5/preview/1700000000000-abc-t.jpg');
+});

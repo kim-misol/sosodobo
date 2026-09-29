@@ -306,19 +306,32 @@ const UPLOAD_CONTENT_TYPES = [
  * 브라우저 직접 업로드용 토큰 규칙. photos/ 폴더 안, 이미지·영상, 용량 제한만 허용합니다.
  * (이미지는 브라우저에서 JPEG 로 줄여 올리므로 HEIC 원본은 올라오지 않습니다.)
  */
-function assertUploadPath(pathname) {
+// 일정 미리보기 사진: 브라우저에서 1600px JPEG 로 줄여 올리므로 이미지 · 8MB 까지만
+const PREVIEW_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const PREVIEW_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
+ * 올릴 수 있는 경로와 그 규칙.
+ *  - photos/…                 앨범 사진·영상
+ *  - trips/<여행 id>/preview/… 일정 미리보기 사진 (tripId 를 알면 그 여행 경로만)
+ */
+function uploadRule(pathname, tripId) {
   const p = String(pathname || '');
-  if (!/^photos\/[A-Za-z0-9._\-/]+$/.test(p) || p.includes('..')) {
-    throw new Error('허용되지 않은 업로드 경로입니다.');
+  if (p.includes('..')) throw new Error('허용되지 않은 업로드 경로입니다.');
+  const preview = /^trips\/(\d+)\/preview\/[A-Za-z0-9._-]+$/.exec(p);
+  if (preview) {
+    if (Number.isInteger(tripId) && Number(preview[1]) !== tripId) throw new Error('다른 여행에는 올릴 수 없어요.');
+    return { path: p, types: PREVIEW_CONTENT_TYPES, maxBytes: PREVIEW_MAX_BYTES };
   }
-  return p;
+  if (/^photos\/[A-Za-z0-9._\-/]+$/.test(p)) return { path: p, types: UPLOAD_CONTENT_TYPES, maxBytes: LIMITS.videoMaxBytes };
+  throw new Error('허용되지 않은 업로드 경로입니다.');
 }
 
-function uploadTokenOptions(pathname) {
-  assertUploadPath(pathname);
+function uploadTokenOptions(pathname, tripId) {
+  const rule = uploadRule(pathname, tripId);
   return {
-    allowedContentTypes: UPLOAD_CONTENT_TYPES,
-    maximumSizeInBytes: LIMITS.videoMaxBytes,
+    allowedContentTypes: rule.types,
+    maximumSizeInBytes: rule.maxBytes,
     addRandomSuffix: true,
   };
 }
@@ -327,10 +340,11 @@ function uploadTokenOptions(pathname) {
  * OIDC(presigned) 업로드용 서명 범위. 서명을 이 경로 하나·put 하나로 좁히므로 경로를 바꾸는
  * 무작위 접미사는 붙이지 않습니다 (경로에 이미 시각 + 무작위 문자열이 들어 있어요).
  */
-function presignedUploadOptions(pathname, nowMs) {
-  const p = assertUploadPath(pathname);
+function presignedUploadOptions(pathname, nowMs, tripId) {
+  const rule = uploadRule(pathname, tripId);
+  const p = rule.path;
   const now = Number.isFinite(nowMs) ? nowMs : Date.now();
-  const limits = { allowedContentTypes: UPLOAD_CONTENT_TYPES, maximumSizeInBytes: LIMITS.videoMaxBytes };
+  const limits = { allowedContentTypes: rule.types, maximumSizeInBytes: rule.maxBytes };
   return {
     signed: { pathname: p, operations: ['put'], validUntil: now + 60 * 60 * 1000, ...limits },
     urlOptions: { ...limits, addRandomSuffix: false },
@@ -395,6 +409,8 @@ module.exports = {
   toInt,
   toIsoOrNull,
   uploadTokenOptions,
+  uploadRule,
+  PREVIEW_MAX_BYTES,
   presignedUploadOptions,
   mapPhotoRow,
   TAKEN_AT_SOURCES,

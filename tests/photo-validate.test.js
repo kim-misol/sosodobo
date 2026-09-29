@@ -234,3 +234,15 @@ test('parsePhotoPatch: 올린 사람이 아니면 캡션은 못 고치고 나머
   assert.equal(ok.value.day, 2);
   assert.equal(ok.value.caption, '노을');
 });
+
+test('uploadRule: 앨범(photos/)과 여행별 미리보기(trips/<id>/preview/)만, 다른 여행 경로는 거절', () => {
+  const { uploadRule, uploadTokenOptions } = require('../api/_photo-validate.js');
+  assert.equal(uploadRule('photos/1-abc.jpg').maxBytes > 8 * 1024 * 1024, true, '앨범은 영상 용량까지');
+  const pv = uploadRule('trips/5/preview/1-abc.jpg', 5);
+  assert.deepEqual(pv.types, ['image/jpeg', 'image/png', 'image/webp']);
+  assert.equal(pv.maxBytes, 8 * 1024 * 1024);
+  assert.throws(() => uploadRule('trips/6/preview/1-abc.jpg', 5), /다른 여행/);
+  assert.throws(() => uploadRule('trips/5/other/1.jpg', 5), /허용되지 않은/);
+  assert.throws(() => uploadRule('trips/5/preview/../x.jpg', 5), /허용되지 않은/);
+  assert.deepEqual(uploadTokenOptions('trips/5/preview/1.jpg', 5).allowedContentTypes, ['image/jpeg', 'image/png', 'image/webp']);
+});

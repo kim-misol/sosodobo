@@ -52,7 +52,7 @@ async function handler(req, res) {
         request: req,
         body,
         getSignedToken: async (pathname) => {
-          const { signed, urlOptions } = presignedUploadOptions(pathname);
+          const { signed, urlOptions } = presignedUploadOptions(pathname, undefined, req.tripId);
           return { token: await issueSignedToken({ ...signed, token }), urlOptions };
         },
       });
@@ -62,7 +62,7 @@ async function handler(req, res) {
       token: findBlobToken(process.env) || undefined,
       request: req,
       body,
-      onBeforeGenerateToken: async (pathname) => uploadTokenOptions(pathname),
+      onBeforeGenerateToken: async (pathname) => uploadTokenOptions(pathname, req.tripId),
     });
     return res.status(200).json(result);
   } catch (err) {

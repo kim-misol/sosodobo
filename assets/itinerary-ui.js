@@ -284,6 +284,90 @@
       '<button type="submit" class="tui-btn primary">' + (it ? '저장' : '추가') + '</button></form>';
   }
 
+  // ---- 미리보기 사진 (하루 10장, 브라우저에서 줄여서 저장소에 올림) ----
+  function photosSectionHtml(day) {
+    var n = day.photos.length;
+    var full = n >= I.PREVIEW.perDay;
+    var up = state.uploading;
+    return '<section class="it-sec"><div class="it-sec-head"><h3>미리보기 사진 <span class="m-muted">' + (n > I.PREVIEW.perDay ? n + '장' : n + '/' + I.PREVIEW.perDay) + '</span></h3>' +
+      (full || up ? '' : '<label class="it-add it-upload">+ 사진 추가<input type="file" accept="image/*" multiple data-it="photo-file"></label>') + '</div>' +
+      (up ? '<p class="it-per" role="status">올리는 중… ' + up.done + '/' + up.total + '</p>' : '') +
+      (n ? '<div class="it-photos">' + day.photos.map(function (p, i) {
+        var local = !/^https:/.test(p.url);
+        return '<figure class="it-photo"><img src="' + esc(p.thumbUrl || p.url) + '" alt="' + esc(p.caption || '') + '" loading="lazy">' +
+          '<input class="it-cap" data-photo="' + p.id + '" maxlength="' + I.PREVIEW.captionMax + '" value="' + esc(p.caption) + '" placeholder="설명 (선택)" aria-label="사진 설명">' +
+          '<div class="it-row-tools">' +
+          '<button type="button" data-it="photo-move" data-dir="-1" data-photo="' + p.id + '" aria-label="앞으로"' + (i === 0 ? ' disabled' : '') + '>←</button>' +
+          '<button type="button" data-it="photo-move" data-dir="1" data-photo="' + p.id + '" aria-label="뒤로"' + (i === n - 1 ? ' disabled' : '') + '>→</button>' +
+          '<button type="button" data-it="photo-del" data-photo="' + p.id + '" aria-label="지우기">🗑</button></div>' +
+          (local ? '<span class="it-local" title="사이트에 들어 있는 사진">기본</span>' : '') + '</figure>';
+      }).join('') + '</div>' : '<p class="it-none">가 보기 전에 볼 사진을 넣어 두면 일정에 넘겨 보는 사진으로 보여요.</p>') +
+      (full ? '<p class="it-none">하루 ' + I.PREVIEW.perDay + '장까지 넣을 수 있어요. 더 넣으려면 몇 장을 지워 주세요.</p>' : '') +
+      '<p class="it-none">사진은 긴 쪽 ' + I.PREVIEW.maxEdge + 'px 로 줄여서 올려요.</p></section>';
+  }
+
+  function loadImg(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () { resolve({ img: img, url: url }); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('이 브라우저에서 열 수 없는 사진 형식이에요. (HEIC 라면 Safari 에서 올리거나 JPG 로 바꿔 주세요.)')); };
+      img.src = url;
+    });
+  }
+  function toJpeg(img, maxEdge, quality) {
+    var size = window.PhotoCore.fitWithin(img.naturalWidth, img.naturalHeight, maxEdge);
+    var c = document.createElement('canvas');
+    c.width = size.width; c.height = size.height;
+    c.getContext('2d').drawImage(img, 0, 0, size.width, size.height);
+    return new Promise(function (resolve, reject) {
+      c.toBlob(function (b) { if (b) resolve({ blob: b, width: size.width, height: size.height }); else reject(new Error('사진을 변환하지 못했어요.')); }, 'image/jpeg', quality);
+    });
+  }
+
+  async function uploadPreviewFiles(fileList) {
+    var day = currentDay();
+    var room = I.PREVIEW.perDay - day.photos.length;
+    var files = Array.prototype.slice.call(fileList || []).filter(function (f) {
+      return /^image\//.test(f.type) || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name);
+    });
+    if (!files.length) { state.error = '사진 파일을 골라 주세요.'; drawSheet(); return; }
+    var skipped = Math.max(0, files.length - room);
+    files = files.slice(0, Math.max(0, room));
+    if (!window.PhotoUI || !window.PhotoUI.uploadBlob) { state.error = '사진을 올릴 준비가 안 됐어요. 새로고침한 뒤 다시 시도해 주세요.'; drawSheet(); return; }
+    state.busy = true;
+    state.error = null;
+    state.uploading = { done: 0, total: files.length };
+    drawSheet();
+    for (var i = 0; i < files.length; i++) {
+      var loaded = null;
+      try {
+        loaded = await loadImg(files[i]);
+        var full = await toJpeg(loaded.img, I.PREVIEW.maxEdge, 0.82);
+        var thumb = await toJpeg(loaded.img, I.PREVIEW.thumbEdge, 0.75);
+        var now = Date.now();
+        var rand = Math.random().toString(36).slice(2, 10);
+        var fullRes = await window.PhotoUI.uploadBlob(I.previewPath(state.trip.id, 'full', now, rand), full.blob, 'image/jpeg');
+        var thumbRes = await window.PhotoUI.uploadBlob(I.previewPath(state.trip.id, 'thumb', now, rand), thumb.blob, 'image/jpeg');
+        var d = await api('POST', 'part=day-photo&day=' + day.dayNo, { url: fullRes.url, thumbUrl: thumbRes.url, width: full.width, height: full.height });
+        state.data = Object.assign({}, state.data, d);
+        render();
+        state.uploading.done += 1;
+        drawSheet();
+      } catch (err) {
+        var msg = window.PhotoCore && window.PhotoCore.uploadErrorMessage ? window.PhotoCore.uploadErrorMessage(err && err.message) : { text: err.message, storageMissing: false };
+        state.error = msg.storageMissing ? '사진 저장소(Vercel Blob)가 아직 연결되지 않아 올릴 수 없어요. 연결된 뒤 다시 추가해 주세요.' : msg.text;
+        if (msg.storageMissing) break; // 저장소 문제면 나머지도 같은 이유로 실패
+      } finally {
+        if (loaded) URL.revokeObjectURL(loaded.url);
+      }
+    }
+    if (!state.error && skipped) state.error = '하루 ' + I.PREVIEW.perDay + '장까지라 ' + skipped + '장은 넣지 않았어요.';
+    state.uploading = null;
+    state.busy = false;
+    drawSheet();
+  }
+
   function lodgingFormHtml(l, day) {
     var v = l || {};
     var edit = !!l;
@@ -393,7 +477,7 @@
           '<button type="button" data-it="del-lodging" data-lodging="' + l.id + '" aria-label="지우기">🗑</button></div></div>';
       }).join('') : '<p class="it-none">이날 밤 숙소가 없어요.</p>') + coverageWarning(day.date) +
       '<p class="it-none">인원이 많으면 하룻밤에 숙소를 여러 곳 넣을 수 있어요.</p></section>' +
-      (day.photos.length ? '<p class="it-none">미리보기 사진 ' + day.photos.length + '장 · 사진 추가는 곧 추가돼요.</p>' : '');
+      photosSectionHtml(day);
   }
 
   function updateMapHint() {
@@ -427,6 +511,12 @@
     var find = function () { return day.items.find(function (x) { return x.id === itemId; }); };
     if (a === 'close') closeSheet();
     else if (a === 'back') { state.view = 'day'; state.item = null; state.lodging = null; state.error = null; drawSheet(); }
+    else if (a === 'photo-move') {
+      busyRun(api('POST', 'part=day-photo-move&photo=' + b.getAttribute('data-photo'), { dir: Number(b.getAttribute('data-dir')) }));
+    } else if (a === 'photo-del') {
+      if (!confirm('이 미리보기 사진을 지울까요?')) return;
+      busyRun(api('DELETE', 'part=day-photo&photo=' + b.getAttribute('data-photo')));
+    }
     else if (a === 'add-lodging') { state.view = 'lodging'; state.lodging = null; state.error = null; drawSheet(); }
     else if (a === 'edit-lodging' || a === 'del-lodging') {
       var lid = Number(b.getAttribute('data-lodging'));
@@ -453,6 +543,11 @@
   }
 
   function onSheetChange(e) {
+    if (e.target.matches('[data-it="photo-file"]')) { uploadPreviewFiles(e.target.files); return; }
+    if (e.target.matches('.it-cap') && !state.busy) {
+      busyRun(api('PATCH', 'part=day-photo&photo=' + e.target.getAttribute('data-photo'), { caption: e.target.value }));
+      return;
+    }
     if (e.target.closest('form[data-it-form="lodging"]')) updateLodgingForm();
     if (e.target.name === 'planMode') {
       var note = sheet.querySelector('[data-it="free-note"]');

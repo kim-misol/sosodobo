@@ -328,11 +328,50 @@
     return out;
   }
 
+  // ---------------------------------------------------------------------------
+  // 미리보기 사진
+  // ---------------------------------------------------------------------------
+  var PREVIEW = { perDay: 10, captionMax: 100, maxEdge: 1600, thumbEdge: 480 };
+
+  /** 이 여행의 미리보기 사진 저장 위치 (Vercel Blob · trips/<id>/preview/) 인지 */
+  function isPreviewUrl(url, tripId) {
+    var v = safeUrl(url);
+    if (!v) return false;
+    var u;
+    try { u = new URL(v); } catch (e) { return false; }
+    return u.protocol === 'https:' && /\.blob\.vercel-storage\.com$/.test(u.hostname) &&
+      new RegExp('^/trips/' + Number(tripId) + '/preview/[A-Za-z0-9._-]+$').test(u.pathname);
+  }
+
+  /** 미리보기 사진 등록값 검증 → { value } | { error } */
+  function validateDayPhoto(input, tripId, currentCount) {
+    var b = input || {};
+    if ((currentCount || 0) >= PREVIEW.perDay) return { error: '미리보기 사진은 하루에 ' + PREVIEW.perDay + '장까지 넣을 수 있어요.' };
+    if (!isPreviewUrl(b.url, tripId) || !isPreviewUrl(b.thumbUrl || b.url, tripId)) return { error: '올린 사진 주소가 올바르지 않아요.' };
+    var caption = clean(b.caption);
+    if (caption.length > PREVIEW.captionMax) return { error: '사진 설명은 ' + PREVIEW.captionMax + '자 이하로 입력해 주세요.' };
+    var w = Number(b.width);
+    var h = Number(b.height);
+    return {
+      value: {
+        url: clean(b.url), thumbUrl: clean(b.thumbUrl || b.url), caption: caption || null,
+        width: Number.isInteger(w) && w > 0 ? w : null, height: Number.isInteger(h) && h > 0 ? h : null,
+      },
+    };
+  }
+
+  /** 미리보기 사진 저장 경로 (브라우저에서 만들어 올림) */
+  function previewPath(tripId, kind, nowMs, rand) {
+    var safe = String(rand || '').replace(/[^A-Za-z0-9]/g, '');
+    return 'trips/' + Number(tripId) + '/preview/' + nowMs + '-' + safe + (kind === 'thumb' ? '-t' : '') + '.jpg';
+  }
+
   var ItineraryCore = {
     LIMITS: LIMITS, KINDS: KINDS, MOVE_MODES: MOVE_MODES, TIMINGS: TIMINGS, MAP_LABEL: MAP_LABEL,
     safeUrl: safeUrl, detectMapProvider: detectMapProvider, stars: stars,
     validateDay: validateDay, validateItem: validateItem, groupItems: groupItems, moveItem: moveItem,
     buildDays: buildDays, dayHasContent: dayHasContent, lodgingNights: lodgingNights, shortWon: shortWon,
+    PREVIEW: PREVIEW, isPreviewUrl: isPreviewUrl, validateDayPhoto: validateDayPhoto, previewPath: previewPath,
     LODGING: LODGING, validateLodging: validateLodging, perPersonCost: perPersonCost, parseWon: parseWon,
     lodgingExpenseDescription: lodgingExpenseDescription, nightlyCoverage: nightlyCoverage,
   };
