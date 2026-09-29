@@ -309,6 +309,9 @@ const UPLOAD_CONTENT_TYPES = [
 // 일정 미리보기 사진: 브라우저에서 1600px JPEG 로 줄여 올리므로 이미지 · 8MB 까지만
 const PREVIEW_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const PREVIEW_MAX_BYTES = 8 * 1024 * 1024;
+// 티켓 · 예약 문서: 사진(브라우저에서 2400px 로 줄임)과 PDF, 15MB 까지
+const DOC_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const DOC_MAX_BYTES = 15 * 1024 * 1024;
 
 /**
  * 올릴 수 있는 경로와 그 규칙.
@@ -318,10 +321,12 @@ const PREVIEW_MAX_BYTES = 8 * 1024 * 1024;
 function uploadRule(pathname, tripId) {
   const p = String(pathname || '');
   if (p.includes('..')) throw new Error('허용되지 않은 업로드 경로입니다.');
-  const preview = /^trips\/(\d+)\/preview\/[A-Za-z0-9._-]+$/.exec(p);
+  const preview = /^trips\/(\d+)\/(preview|docs)\/[A-Za-z0-9._-]+$/.exec(p);
   if (preview) {
     if (Number.isInteger(tripId) && Number(preview[1]) !== tripId) throw new Error('다른 여행에는 올릴 수 없어요.');
-    return { path: p, types: PREVIEW_CONTENT_TYPES, maxBytes: PREVIEW_MAX_BYTES };
+    return preview[2] === 'docs'
+      ? { path: p, types: DOC_CONTENT_TYPES, maxBytes: DOC_MAX_BYTES }
+      : { path: p, types: PREVIEW_CONTENT_TYPES, maxBytes: PREVIEW_MAX_BYTES };
   }
   if (/^photos\/[A-Za-z0-9._\-/]+$/.test(p)) return { path: p, types: UPLOAD_CONTENT_TYPES, maxBytes: LIMITS.videoMaxBytes };
   throw new Error('허용되지 않은 업로드 경로입니다.');

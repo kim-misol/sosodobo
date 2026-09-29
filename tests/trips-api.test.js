@@ -340,3 +340,61 @@ test('미리보기 사진: 지우면 저장소 파일도 정리 · 순서 바꾸
     assert.equal(missing.statusCode, 404);
   });
 });
+
+// ---- 티켓 · 예약 ----------------------------------------------------------------------
+
+const DOC = 'https://abc.public.blob.vercel-storage.com/trips/5/docs/';
+function docsSql(row, opts) {
+  const o = opts || {};
+  return sqlFor(row, (text) => {
+    if (text.startsWith('SELECT id FROM travelers WHERE trip_id')) return { rows: [{ id: 11 }, { id: 12 }] };
+    if (text.startsWith('INSERT INTO trip_docs')) return { rows: [{ id: 40 }] };
+    if (text.startsWith('SELECT id, uploader_id FROM trip_docs')) return { rows: o.doc ? [o.doc] : [] };
+    if (text.startsWith('SELECT url FROM trip_doc_files WHERE doc_id')) return { rows: (o.files || []).map((u) => ({ url: u })) };
+    if (text.startsWith('SELECT kind, title, to_char(doc_date')) return { rows: [{ kind: 'flight', title: '옛 제목', doc_date: null, memo: null, traveler_ids: [] }] };
+    return null;
+  });
+}
+const docBody = { kind: 'flight', title: '김포 → 제주', docDate: '2026-11-14', files: [{ url: DOC + '1-ab.pdf', contentType: 'application/pdf', name: 'ticket.pdf' }] };
+
+test('티켓: 참여자만 보고, 링크 공개 여행을 구경하는 사람은 못 봄', async () => {
+  await withEnv(ENV, async () => {
+    const ok = await call(loadHandler('trips.js', docsSql(tripRow()), { '@vercel/blob': blob }), { method: 'GET', query: { id: '5', part: 'docs' }, headers: { cookie: cookie(3) } });
+    assert.equal(ok.statusCode, 200);
+    assert.deepEqual(ok.body.me, { travelerId: 11, role: 'member' });
+    const outsider = tripRow({ traveler_id: null, role: null, visibility: 'link' });
+    assert.equal((await call(loadHandler('trips.js', docsSql(outsider), { '@vercel/blob': blob }), { method: 'GET', query: { id: '5', part: 'docs' } })).statusCode, 401);
+    assert.equal((await call(loadHandler('trips.js', docsSql(outsider), { '@vercel/blob': blob }), { method: 'GET', query: { id: '5', part: 'docs' }, headers: { cookie: cookie(9) } })).statusCode, 403);
+  });
+});
+
+test('티켓 추가: 올린 사람 = 로그인한 사람, 다른 여행 파일은 거절', async () => {
+  await withEnv(ENV, async () => {
+    const sql = docsSql(tripRow());
+    const res = await call(loadHandler('trips.js', sql, { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'doc' }, headers: { cookie: cookie(3) }, body: Object.assign({}, docBody, { uploaderId: 12 }) });
+    assert.equal(res.statusCode, 201);
+    assert.deepEqual(sql.calls.find((c) => c.text.startsWith('INSERT INTO trip_docs')).values, [5, 'flight', '김포 → 제주', '2026-11-14', null, [], 11]);
+    assert.deepEqual(sql.calls.find((c) => c.text.startsWith('INSERT INTO trip_doc_files')).values, [40, 1, DOC + '1-ab.pdf', 'ticket.pdf', 'application/pdf', null, null, null]);
+    const bad = await call(loadHandler('trips.js', docsSql(tripRow()), { '@vercel/blob': blob }), { method: 'POST', query: { id: '5', part: 'doc' }, headers: { cookie: cookie(3) }, body: Object.assign({}, docBody, { files: [{ url: DOC.replace('/trips/5/', '/trips/6/') + 'x.pdf' }] }) });
+    assert.match(bad.body.error, /주소/);
+  });
+});
+
+test('티켓 고치기 · 지우기: 올린 사람과 관리자만, 빠진 파일은 저장소에서도 정리', async () => {
+  await withEnv(ENV, async () => {
+    const other = await call(loadHandler('trips.js', docsSql(tripRow(), { doc: { id: 40, uploader_id: 12 } }), { '@vercel/blob': blob }), { method: 'DELETE', query: { id: '5', part: 'doc', doc: '40' }, headers: { cookie: cookie(3) } });
+    assert.equal(other.statusCode, 403);
+    const deleted = [];
+    const b = { del: async (urls) => { deleted.push(...urls); } };
+    const adminDel = await call(loadHandler('trips.js', docsSql(tripRow({ role: 'admin' }), { doc: { id: 40, uploader_id: 12 }, files: [DOC + 'a.pdf', DOC + 'b.jpg'] }), { '@vercel/blob': b }), { method: 'DELETE', query: { id: '5', part: 'doc', doc: '40' }, headers: { cookie: cookie(3) } });
+    assert.equal(adminDel.statusCode, 200);
+    assert.deepEqual(deleted, [DOC + 'a.pdf', DOC + 'b.jpg']);
+    const removed = [];
+    const b2 = { del: async (urls) => { removed.push(...urls); } };
+    const sql = docsSql(tripRow(), { doc: { id: 40, uploader_id: 11 }, files: [DOC + 'a.pdf', DOC + 'b.jpg'] });
+    const res = await call(loadHandler('trips.js', sql, { '@vercel/blob': b2 }), { method: 'PATCH', query: { id: '5', part: 'doc', doc: '40' }, headers: { cookie: cookie(3) }, body: { title: '새 제목', files: [{ url: DOC + 'a.pdf' }] } });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(removed, [DOC + 'b.jpg'], '남긴 파일은 그대로, 빠진 파일만 정리');
+    assert.equal(sql.calls.find((c) => c.text.startsWith('UPDATE trip_docs SET')).values[1], '새 제목');
+  });
+});

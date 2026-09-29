@@ -149,6 +149,14 @@
     if (g.movesAfter.length) out += '<div class="block"><h3>🚕 이동</h3><div class="it-rows">' + g.movesAfter.map(moveHtml).join('') + '</div></div>';
     // 숙소 배정 경고는 여행이 끝나기 전까지만 일정에 보여 줌 (편집 화면에서는 항상)
     if (lodgings.length) out += '<div class="block"><h3>🏠 숙소</h3>' + lodgings.map(lodgingHtml).join('') + (tripEnded() ? '' : coverageWarning(day.date)) + '</div>';
+    var docs = window.DocsUI ? window.DocsUI.forDate(day.date) : [];
+    if (docs.length) {
+      out += '<div class="block"><h3>🎫 티켓 · 예약</h3><div class="it-rows">' + docs.map(function (d) {
+        var k = window.DocsCore.kindOf(d.kind);
+        return '<button type="button" class="it-row it-doc" data-it="doc" data-doc="' + d.id + '"><span class="it-ico" aria-hidden="true">' + k.icon + '</span>' +
+          '<div class="it-row-main">' + esc(d.title) + '<span>' + esc(k.label) + (d.files.length > 1 ? ' · 파일 ' + d.files.length + '개' : '') + '</span></div></button>';
+      }).join('') + '</div></div>';
+    }
     return out + '</section>';
   }
 
@@ -646,6 +654,8 @@
       });
     }
     els.box.addEventListener('click', function (e) {
+      var docBtn = e.target.closest('[data-it="doc"]');
+      if (docBtn && window.DocsUI) { window.DocsUI.open(Number(docBtn.getAttribute('data-doc'))); return; }
       var b = e.target.closest('[data-it="edit-day"]');
       if (!b) return;
       state.editingDay = Number(b.getAttribute('data-day'));
@@ -669,7 +679,7 @@
     load();
   }
 
-  window.ItineraryUI = { reload: load, daysWithContentBeyond: daysWithContentBeyond, state: state };
+  window.ItineraryUI = { reload: load, rerender: render, daysWithContentBeyond: daysWithContentBeyond, state: state };
 
   var boot = function () { if (window.TripContext) window.TripContext.ready.then(init); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

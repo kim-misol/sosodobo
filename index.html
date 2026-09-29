@@ -998,6 +998,39 @@
   .it-per{margin:0;font-size:13px;color:var(--sea);font-weight:700;}
   .it-upload{position:relative;overflow:hidden;cursor:pointer;}
   .it-upload input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;}
+  /* 티켓 · 예약 (docs-ui.js) */
+  .docs-intro{margin-top:48px;}
+  .docs{display:flex;flex-direction:column;gap:10px;}
+  .docs[hidden],.docs-intro[hidden]{display:none;}
+  .dc-top{display:flex;align-items:flex-start;gap:12px;}
+  .dc-top p{flex:1;margin:0;font-size:13.5px;color:var(--sub);}
+  .dc-date{margin:10px 0 0;font-size:13px;color:var(--sea);font-weight:800;font-variant-numeric:tabular-nums;}
+  .dc-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;}
+  .dc-head{display:flex;align-items:center;gap:10px;}
+  .dc-ico{font-size:22px;flex:none;}
+  .dc-t{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .dc-t b{font-size:15px;overflow-wrap:anywhere;}
+  .dc-t span{font-size:12px;color:var(--sub);}
+  .dc-memo{margin:0;font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--sand);border-radius:10px;padding:8px 10px;}
+  .dc-files{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .dc-thumb{width:72px;height:72px;border:1px solid var(--line);border-radius:10px;padding:0;overflow:hidden;cursor:zoom-in;background:var(--sand);}
+  .dc-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .dc-pdf{display:inline-flex;align-items:center;gap:4px;max-width:100%;border:1px solid var(--line);background:var(--sand);border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700;color:var(--sea);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .dc-file-chip{position:relative;display:inline-flex;align-items:center;min-height:56px;max-width:180px;border:1px solid var(--line);background:var(--sand);border-radius:10px;padding:0 26px 0 10px;font-size:12.5px;overflow:hidden;}
+  .dc-file-chip img{width:56px;height:56px;object-fit:cover;margin:0 -16px 0 -10px;}
+  .dc-file-chip.new{border-style:dashed;border-color:var(--sea);}
+  .dc-file-chip button{position:absolute;top:2px;right:2px;width:22px;height:22px;border:0;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;font-size:13px;line-height:1;}
+  .dc-add-file{min-height:56px;display:inline-flex;align-items:center;border:1px dashed var(--line);border-radius:10px;padding:0 14px;}
+  .it-doc{width:100%;border:0;text-align:left;cursor:pointer;font-family:inherit;color:inherit;}
+  .it-doc .it-ico{font-size:18px;}
+  .dc-viewer{position:fixed;inset:0;z-index:300;background:rgba(10,12,10,.94);display:flex;flex-direction:column;}
+  .dc-viewer-top{display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px;color:#fff;font-size:14px;font-weight:700;}
+  .dc-viewer-top span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .dc-viewer-top button{width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;font-size:22px;cursor:pointer;}
+  .dc-viewer-top a{color:#fff;font-size:13px;}
+  .dc-viewer-stage{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;padding:0 8px calc(12px + env(safe-area-inset-bottom,0px));}
+  .dc-viewer-stage img{max-width:100%;max-height:100%;object-fit:contain;}
+  @media (max-width:767px){.docs-intro{margin-top:36px;}}
   .it-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;}
   .it-photo{margin:0;position:relative;display:flex;flex-direction:column;gap:4px;background:var(--sand);border-radius:12px;padding:6px;}
   .it-photo img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;display:block;}
@@ -1205,6 +1238,16 @@
   <!-- 날짜별 일정: DB 에서 불러와 그림 (itinerary-ui.js). 남해 여행의 예전 일정도 DB 로 옮겨 같은 모양으로. -->
   <div class="trip-days" id="trip-days" data-m="home"></div>
 
+  <!-- 티켓 · 예약 (docs-ui.js) — 참여자만, 링크로 구경하는 사람에게는 숨김 -->
+  <div class="section-intro docs-intro" data-m="home" hidden>
+    <span class="icon">🎫</span>
+    <div>
+      <h2>티켓 · 예약</h2>
+      <p>항공권 · 숙소 · 렌터카 · 관광 티켓 · 인보이스</p>
+    </div>
+  </div>
+  <div class="docs" id="docs" data-m="home" hidden></div>
+
 
   <div class="section-intro" id="photos-intro" data-m="none">
     <span class="icon">📷</span>
@@ -1336,7 +1379,9 @@
 <script src="assets/reel-ui.js"></script>
 <script src="assets/trip-ui.js"></script>
 <script src="assets/itinerary-core.js"></script>
+<script src="assets/docs-core.js"></script>
 <script src="assets/itinerary-ui.js"></script>
+<script src="assets/docs-ui.js"></script>
 <script src="assets/mobile-shell.js"></script>
 <script>
   document.querySelectorAll('.carousel').forEach(function (el) {

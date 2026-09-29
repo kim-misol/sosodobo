@@ -246,3 +246,11 @@ test('uploadRule: 앨범(photos/)과 여행별 미리보기(trips/<id>/preview/)
   assert.throws(() => uploadRule('trips/5/preview/../x.jpg', 5), /허용되지 않은/);
   assert.deepEqual(uploadTokenOptions('trips/5/preview/1.jpg', 5).allowedContentTypes, ['image/jpeg', 'image/png', 'image/webp']);
 });
+
+test('uploadRule: 티켓 · 예약 문서(trips/<id>/docs/)는 사진과 PDF, 15MB', () => {
+  const { uploadRule } = require('../api/_photo-validate.js');
+  const r = uploadRule('trips/5/docs/1-abc.pdf', 5);
+  assert.ok(r.types.includes('application/pdf'));
+  assert.equal(r.maxBytes, 15 * 1024 * 1024);
+  assert.throws(() => uploadRule('trips/6/docs/1.pdf', 5), /다른 여행/);
+});

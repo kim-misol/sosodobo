@@ -41,6 +41,13 @@
   function saveLast(id) { try { localStorage.setItem(LAST_KEY, String(id)); } catch (e) { /* 사생활 보호 모드 등 */ } }
   function urlTrip() { var m = /[?&]trip=(\d+)/.exec(location.search); return m ? Number(m[1]) : null; }
 
+  // 주소에 여행이 있으면 로그인 확인을 기다리지 않고 여행 정보를 미리 불러 둠 (왕복 한 번 줄이기)
+  var prefetched = null;
+  (function () {
+    var id = urlTrip();
+    if (id && baseFetch) prefetched = { id: id, promise: getJson('api/trips?id=' + id) };
+  })();
+
   /** 내 여행 목록 (다시 불러오려면 force). */
   TC.loadTrips = function (force) {
     if (TC.trips && !force) return Promise.resolve(TC.trips);
@@ -110,7 +117,9 @@
   }
 
   function openTrip(id, fallbackList) {
-    return getJson('api/trips?id=' + id).then(function (r) {
+    var req = prefetched && prefetched.id === id ? prefetched.promise : getJson('api/trips?id=' + id);
+    prefetched = null;
+    return req.then(function (r) {
       if (r.ok) { finish(r.data.trip); return; }
       if (r.data && r.data.code === 'join_required' && window.AuthUI) {
         window.AuthUI.showJoin({ back: '내 여행으로' });

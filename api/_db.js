@@ -12,7 +12,7 @@ let schemaReady = null;
 
 // 표 구조를 바꿀 때마다 올려 주세요. DB 에 기록된 값과 같으면 아래의 표 만들기·옮기기(수십 번의 쿼리)를
 // 통째로 건너뛰어, 서버가 새로 뜰 때마다 드는 시간을 줄입니다.
-const SCHEMA_VERSION = '2026-09-30.1';
+const SCHEMA_VERSION = '2026-09-30.2';
 
 // 테이블이 없으면 만듭니다. 최초 요청 때 한 번만 실행되도록 캐싱합니다.
 async function ensureSchema() {
@@ -187,6 +187,26 @@ async function ensureSchema() {
         map_url TEXT, map_provider TEXT, link_url TEXT, image_url TEXT,
         expense_id INTEGER REFERENCES expenses(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`;
+      // 티켓 · 예약 문서 (항공권 · 인보이스 · 렌터카 · 관광 티켓 …) — 참여자만 봄
+      await sql`CREATE TABLE IF NOT EXISTS trip_docs (
+        id SERIAL PRIMARY KEY,
+        trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        doc_date DATE,
+        memo TEXT,
+        traveler_ids INTEGER[] NOT NULL DEFAULT '{}',
+        uploader_id INTEGER REFERENCES travelers(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS trip_docs_trip_idx ON trip_docs (trip_id, doc_date)`;
+      await sql`CREATE TABLE IF NOT EXISTS trip_doc_files (
+        id SERIAL PRIMARY KEY,
+        doc_id INTEGER NOT NULL REFERENCES trip_docs(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL DEFAULT 0,
+        url TEXT NOT NULL, name TEXT, content_type TEXT, size INTEGER, width INTEGER, height INTEGER
       )`;
       await sql`CREATE TABLE IF NOT EXISTS lodging_guests (
         lodging_id INTEGER NOT NULL REFERENCES lodgings(id) ON DELETE CASCADE,

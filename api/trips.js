@@ -20,11 +20,17 @@
 //   POST   ?id=5&part=day-photo&day=2 { url, thumbUrl, width, height, caption } → 미리보기 사진 등록 (하루 10장)
 //   PATCH  ?id=5&part=day-photo&photo=4 { caption }  ·  DELETE ?id=5&part=day-photo&photo=4 (파일도 정리)
 //   POST   ?id=5&part=day-photo-move&photo=4 { dir: -1|1 }
+//
+//   티켓 · 예약 문서 (참여자만 — 링크 공개여도 구경하는 사람은 못 봄)
+//   GET    ?id=5&part=docs                         → { docs: [...], me }
+//   POST   ?id=5&part=doc { kind, title, docDate?, memo?, travelerIds?, files: [...] }  (참여자 누구나)
+//   PATCH  ?id=5&part=doc&doc=3 { …바꿀 항목 }  ·  DELETE ?id=5&part=doc&doc=3  (올린 사람 · 관리자, 파일도 정리)
 const { del } = require('@vercel/blob');
 const { sql, ensureSchema, sendError, randomJoinCode } = require('./_db');
 const A = require('./_auth');
 const TripCore = require('../assets/trip-core.js');
 const I = require('../assets/itinerary-core.js');
+const DocsCore = require('../assets/docs-core.js');
 const { findBlobToken } = require('./_blob-token');
 
 function readBody(req) {
@@ -233,6 +239,98 @@ async function handleDayPhoto(req, res, trip, b, part) {
   return res.status(400).json({ error: '알 수 없는 요청이에요.' });
 }
 
+// ---- 티켓 · 예약 문서 ------------------------------------------------------------------
+async function loadDocs(tripId) {
+  const docs = await sql`
+    SELECT id, kind, title, to_char(doc_date, 'YYYY-MM-DD') AS doc_date, memo, traveler_ids, uploader_id, created_at
+    FROM trip_docs WHERE trip_id = ${tripId}`;
+  const files = await sql`
+    SELECT f.id, f.doc_id, f.url, f.name, f.content_type, f.size, f.width, f.height
+    FROM trip_doc_files f JOIN trip_docs d ON d.id = f.doc_id WHERE d.trip_id = ${tripId} ORDER BY f.position, f.id`;
+  return DocsCore.sortDocs(docs.rows.map((d) => ({
+    id: d.id, kind: d.kind, title: d.title, docDate: d.doc_date, memo: d.memo,
+    travelerIds: (d.traveler_ids || []).map(Number), uploaderId: d.uploader_id, createdAt: d.created_at,
+    files: files.rows.filter((f) => f.doc_id === d.id).map((f) => ({
+      id: f.id, url: f.url, name: f.name, contentType: f.content_type, size: f.size, width: f.width, height: f.height,
+    })),
+  })));
+}
+
+async function insertDocFiles(docId, files) {
+  let pos = 0;
+  for (const f of files) {
+    pos += 1;
+    await sql`
+      INSERT INTO trip_doc_files (doc_id, position, url, name, content_type, size, width, height)
+      VALUES (${docId}, ${pos}, ${f.url}, ${f.name}, ${f.contentType}, ${f.size}, ${f.width}, ${f.height})`;
+  }
+}
+
+async function handleDocs(req, res, row, ctx) {
+  const part = String(req.query.part || '');
+  if (!ctx.member) {
+    return res.status(ctx.on && !ctx.uid ? 401 : 403).json(ctx.on && !ctx.uid
+      ? { error: '로그인이 필요해요.', code: 'login_required' }
+      : { error: '티켓 · 예약은 이 여행에 참여한 사람만 볼 수 있어요.', code: 'join_required' });
+  }
+  const me = ctx.on ? { travelerId: row.traveler_id, role: row.role || 'member' } : null;
+  const reply = async (status) => res.status(status).json({ docs: await loadDocs(row.id), me });
+  if (req.method === 'GET' && part === 'docs') return reply(200);
+  if (part !== 'doc') return res.status(400).json({ error: '알 수 없는 요청이에요.' });
+
+  const b = readBody(req);
+  const people = await sql`SELECT id FROM travelers WHERE trip_id = ${row.id} ORDER BY id`;
+  const docCtx = { tripId: row.id, travelerIds: people.rows.map((r) => r.id) };
+
+  if (req.method === 'POST') {
+    const parsed = DocsCore.validateDoc(b, docCtx);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const v = parsed.value;
+    // 로그인이 꺼져 있으면 "나는 누구"로 고른 사람을 올린 사람으로 (이 여행 사람일 때만)
+    const uploader = ctx.on ? row.traveler_id : (docCtx.travelerIds.indexOf(Number(b.uploaderId)) >= 0 ? Number(b.uploaderId) : null);
+    const created = await sql`
+      INSERT INTO trip_docs (trip_id, kind, title, doc_date, memo, traveler_ids, uploader_id)
+      VALUES (${row.id}, ${v.kind}, ${v.title}, ${v.docDate}, ${v.memo}, ${v.travelerIds}, ${uploader})
+      RETURNING id`;
+    await insertDocFiles(created.rows[0].id, v.files);
+    return reply(201);
+  }
+
+  const docId = parseInt(req.query.doc, 10);
+  if (!Number.isInteger(docId)) return res.status(400).json({ error: '문서 id가 필요합니다.' });
+  const found = (await sql`SELECT id, uploader_id FROM trip_docs WHERE id = ${docId} AND trip_id = ${row.id}`).rows[0];
+  if (!found) return res.status(404).json({ error: '이 여행에 없는 티켓이에요.' });
+  if (!DocsCore.canModifyDoc({ uploaderId: found.uploader_id }, me)) {
+    return res.status(403).json({ error: '올린 사람이나 관리자만 고치거나 지울 수 있어요.', code: 'not_owner' });
+  }
+  const oldFiles = (await sql`SELECT url FROM trip_doc_files WHERE doc_id = ${docId}`).rows.map((f) => f.url);
+
+  if (req.method === 'DELETE') {
+    await sql`DELETE FROM trip_docs WHERE id = ${docId}`;
+    await removeBlobFiles(oldFiles);
+    return reply(200);
+  }
+  if (req.method === 'PATCH') {
+    const parsed = DocsCore.validateDoc(b, docCtx, { partial: true });
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const v = parsed.value;
+    const cur = (await sql`SELECT kind, title, to_char(doc_date, 'YYYY-MM-DD') AS doc_date, memo, traveler_ids FROM trip_docs WHERE id = ${docId}`).rows[0];
+    await sql`
+      UPDATE trip_docs SET kind = ${'kind' in v ? v.kind : cur.kind}, title = ${'title' in v ? v.title : cur.title},
+        doc_date = ${'docDate' in v ? v.docDate : cur.doc_date}, memo = ${'memo' in v ? v.memo : cur.memo},
+        traveler_ids = ${'travelerIds' in v ? v.travelerIds : cur.traveler_ids}, updated_at = now()
+      WHERE id = ${docId}`;
+    if (v.files) {
+      await sql`DELETE FROM trip_doc_files WHERE doc_id = ${docId}`;
+      await insertDocFiles(docId, v.files);
+      const keep = v.files.map((f) => f.url);
+      await removeBlobFiles(oldFiles.filter((u) => keep.indexOf(u) < 0)); // 빠진 파일만 저장소에서 정리
+    }
+    return reply(200);
+  }
+  return res.status(405).json({ error: 'GET, POST, PATCH, DELETE만 지원합니다.' });
+}
+
 const ITEM_COLUMNS = {
   name: 'name', subtitle: 'subtitle', fromPlace: 'from_place', toPlace: 'to_place', distanceKm: 'distance_km',
   durationText: 'duration_text', difficulty: 'difficulty', mode: 'mode', timing: 'timing',
@@ -398,6 +496,9 @@ async function handler(req, res) {
     const member = !on || !!row.traveler_id;
     const admin = !on || row.role === 'admin';
 
+    // ---- 티켓 · 예약 ----
+    if (part === 'docs' || part === 'doc') return handleDocs(req, res, row, { on, uid, member, admin });
+
     // ---- 날짜별 일정 ----
     if (['itinerary', 'day', 'item', 'item-move', 'lodging', 'day-photo', 'day-photo-move'].indexOf(part) >= 0) {
       return handleItinerary(req, res, row, { on, uid, member, admin, canEdit: member && (admin || row.members_can_edit) });
@@ -462,8 +563,10 @@ async function handler(req, res) {
       const files = await sql`SELECT url, thumb_url FROM photos WHERE trip_id = ${id}`;
       const previews = await sql`
         SELECT p.url, p.thumb_url FROM day_photos p JOIN trip_days d ON d.id = p.day_id WHERE d.trip_id = ${id}`;
+      const docFiles = await sql`
+        SELECT f.url, f.url AS thumb_url FROM trip_doc_files f JOIN trip_docs d ON d.id = f.doc_id WHERE d.trip_id = ${id}`;
       await sql`DELETE FROM trips WHERE id = ${id}`;
-      await removeBlobFiles(files.rows.concat(previews.rows).flatMap((f) => [f.url, f.thumb_url]));
+      await removeBlobFiles(files.rows.concat(previews.rows, docFiles.rows).flatMap((f) => [f.url, f.thumb_url]));
       return res.status(200).json({ ok: true });
     }
 
