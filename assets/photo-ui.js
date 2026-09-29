@@ -40,7 +40,21 @@
     infoOpen: false,     // 라이트박스 ⓘ 촬영 정보 패널
     editingMeta: false,  // 시간·위치 수정 폼 열림
     saving: false,
+    // 모바일(폭 768px 미만) 전용
+    mview: 'all',        // 사진첩 위쪽 탭: 'all' 모두 | 'group' 모아보기 | 'liked' 좋아요
+    groupBy: 'person',   // 모아보기 기준: 'person' 올린 사람별 | 'date' 날짜별
+    album: null,         // 모아보기에서 연 묶음: { type: 'person'|'date', key }
+    sheet: null,         // 크게 보기 위 시트: null | 'comments' | 'info'
   };
+
+  var mobileQuery = window.matchMedia ? window.matchMedia('(max-width: 767px)') : null;
+  /** 폰 폭이면 앱 모양(하단 탭·위아래로 넘기는 크게 보기), 아니면 지금 PC 화면 그대로. */
+  function isMobile() { return !!(mobileQuery && mobileQuery.matches); }
+
+  var listeners = [];
+  function notify() {
+    listeners.forEach(function (fn) { try { fn(state); } catch (e) { console.error(e); } });
+  }
 
   var els = {};
 
@@ -103,7 +117,22 @@
   }
 
   function visiblePhotos() {
-    return P.filterByDay(P.sortByTakenAt(state.photos), state.filter);
+    if (!isMobile()) return P.filterByDay(P.sortByTakenAt(state.photos), state.filter);
+    var sorted = P.sortByTakenAt(state.photos);
+    if (state.mview === 'liked') return P.likedBy(state.photos, state.me);
+    if (state.mview === 'group' && state.album) {
+      if (state.album.type === 'person') {
+        var known = state.travelers.some(function (t) { return t.id === state.album.key; });
+        return sorted.filter(function (p) { return known ? p.uploaderId === state.album.key : !state.travelers.some(function (t) { return t.id === p.uploaderId; }); });
+      }
+      return P.filterByDay(sorted, state.album.key);
+    }
+    return sorted;
+  }
+
+  function dayName(day) {
+    var names = (window.TripPlaces && window.TripPlaces.DAY_NAMES) || {};
+    return names[day] || '';
   }
 
   function photoById(id) {
@@ -564,6 +593,7 @@
   }
 
   function renderGrid() {
+    if (isMobile()) { renderMobile(); return; }
     var list = visiblePhotos();
     if (state.loading && !state.photos.length) {
       els.grid.innerHTML = '';
@@ -591,6 +621,133 @@
     renderMe();
     renderTabs();
     renderGrid();
+    notify();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 렌더링: 모바일 사진첩 (위쪽 탭 · 모두 · 모아보기 · 좋아요)
+  // ---------------------------------------------------------------------------
+  var ICONS = {
+    all: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
+    group: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="13" height="12.5" rx="2.5"/><path d="M7.5 4.5h10a3 3 0 0 1 3 3V16"/></svg>',
+    heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 19.5s-7.5-4.4-7.5-10A4.2 4.2 0 0 1 12 7a4.2 4.2 0 0 1 7.5 2.5c0 5.6-7.5 10-7.5 10z"/></svg>',
+    comment: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 11.5a7.5 6.5 0 1 1 3.4 5.5L4.5 19l.9-3.4a6 6 0 0 1-.9-4.1z"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.1"/></svg>',
+  };
+
+  function cellHtml(p) {
+    var alt = (p.caption || '여행 사진') + ' — ' + nameOf(p.uploaderId);
+    return '<button type="button" class="ph-cell" data-id="' + p.id + '">' +
+      '<img src="' + esc(p.thumbUrl) + '" alt="' + esc(alt) + '" loading="lazy">' + cellBadges(p) + '</button>';
+  }
+
+  function renderMobileTabs() {
+    var liked = P.likedBy(state.photos, state.me).length;
+    els.mtabs.innerHTML = [['all', '모두', ICONS.all], ['group', '모아보기', ICONS.group], ['liked', '좋아요', ICONS.heart]].map(function (t) {
+      var on = state.mview === t[0];
+      return '<button type="button" role="tab" data-mview="' + t[0] + '" aria-selected="' + on + '">' + t[2] +
+        '<span>' + t[1] + (t[0] === 'liked' && liked ? ' ' + liked : '') + '</span></button>';
+    }).join('');
+  }
+
+  function dayHeading(day, count) {
+    if (day === 'etc') return '일차 없음 <span class="ph-muted">' + count + '장</span>';
+    var date = P.formatDayDate(day, tripStart());
+    return 'DAY ' + day + (dayName(day) ? ' · ' + esc(dayName(day)) : '') +
+      ' <span class="ph-muted">' + (date ? date + ' · ' : '') + count + '장</span>';
+  }
+
+  function renderMobile() {
+    renderMobileTabs();
+    var html;
+    if (state.loading && !state.photos.length) {
+      html = '';
+    } else if (!state.photos.length) {
+      html = '<p class="ph-empty">아직 올라온 사진이 없어요. 가운데 📷 버튼으로 첫 사진을 올려 주세요!</p>';
+    } else if (state.mview === 'liked') {
+      html = mobileLikedHtml();
+    } else if (state.mview === 'group') {
+      html = state.album ? mobileAlbumHtml() : mobileGroupsHtml();
+    } else {
+      html = mobileAllHtml();
+    }
+    els.grid.innerHTML = html;
+  }
+
+  function mobileAllHtml() {
+    var videos = state.photos.filter(function (p) { return p.mediaType === 'video'; }).length;
+    var out = '<div class="ph-m-head"><span>사진 ' + (state.photos.length - videos) + ' · 영상 ' + videos + '</span>' +
+      '<button type="button" class="ph-m-link" data-m-action="reel">🎬 슬라이드 영상</button></div>';
+    P.groupByDay(state.photos).forEach(function (g) {
+      if (!g.photos.length) return;
+      out += '<h3 class="ph-m-sep">' + dayHeading(g.day, g.photos.length) + '</h3>' +
+        '<div class="ph-m-grid">' + g.photos.map(cellHtml).join('') + '</div>';
+    });
+    return out;
+  }
+
+  function stripHtml(photos, type, key) {
+    var shown = photos.slice(0, 4);
+    return '<button type="button" class="ph-m-strip" data-album="' + type + ':' + key + '" aria-label="모두 보기">' +
+      shown.map(function (p, i) {
+        var more = i === 3 && photos.length > 4 ? '<span class="ph-m-more">+' + (photos.length - 3) + '</span>' : '';
+        return '<span class="ph-m-thumb"><img src="' + esc(p.thumbUrl) + '" alt="" loading="lazy">' + more + '</span>';
+      }).join('') + '</button>';
+  }
+
+  function mobileGroupsHtml() {
+    var out = '<div class="ph-m-seg" role="group" aria-label="모아보기 기준">' +
+      '<button type="button" data-groupby="person" aria-pressed="' + (state.groupBy === 'person') + '">올린 사람별</button>' +
+      '<button type="button" data-groupby="date" aria-pressed="' + (state.groupBy === 'date') + '">날짜별</button></div>';
+    if (state.groupBy === 'person') {
+      P.groupByUploader(state.photos, state.travelers).forEach(function (g) {
+        out += '<section class="ph-m-album"><div class="ph-m-album-head">' + avatarHtml(g.id, g.name) +
+          '<div class="t"><b>' + esc(g.name) + (g.id !== null && g.id === state.me ? ' <span class="ph-m-chip">나</span>' : '') + '</b>' +
+          '<span class="ph-muted">' + (g.photos.length ? '사진 ' + g.photos.length + '장' : '아직 올린 사진이 없어요') + '</span></div>' +
+          (g.photos.length ? '<button type="button" class="ph-m-link" data-album="person:' + g.id + '">모두 ›</button>' : '') + '</div>' +
+          (g.photos.length ? stripHtml(g.photos, 'person', g.id) : '') + '</section>';
+      });
+    } else {
+      P.groupByDay(state.photos).forEach(function (g) {
+        out += '<section class="ph-m-album"><div class="ph-m-album-head"><span class="ph-m-avatar day">' + (g.day === 'etc' ? '?' : 'D' + g.day) + '</span>' +
+          '<div class="t"><b>' + (g.day === 'etc' ? '일차 없음' : 'DAY ' + g.day + (dayName(g.day) ? ' · ' + esc(dayName(g.day)) : '')) + '</b>' +
+          '<span class="ph-muted">' + (g.day === 'etc' ? '' : P.formatDayDate(g.day, tripStart()) + ' · ') + '사진 ' + g.photos.length + '장</span></div>' +
+          (g.photos.length ? '<button type="button" class="ph-m-link" data-album="date:' + g.day + '">모두 ›</button>' : '') + '</div>' +
+          (g.photos.length ? stripHtml(g.photos, 'date', g.day) : '') + '</section>';
+      });
+    }
+    return out;
+  }
+
+  function albumTitle() {
+    var a = state.album;
+    if (a.type === 'person') return a.key === null ? '알 수 없음' : nameOf(a.key);
+    return a.key === 'etc' ? '일차 없음' : 'DAY ' + a.key + (dayName(a.key) ? ' · ' + dayName(a.key) : '');
+  }
+
+  function mobileAlbumHtml() {
+    var list = visiblePhotos();
+    return '<div class="ph-m-head"><button type="button" class="ph-m-back" data-album-back>‹ 모아보기</button>' +
+      '<span><b>' + esc(albumTitle()) + '</b> · ' + list.length + '장</span></div>' +
+      (list.length ? '<div class="ph-m-grid">' + list.map(cellHtml).join('') + '</div>' : '<p class="ph-empty">사진이 없어요.</p>');
+  }
+
+  function mobileLikedHtml() {
+    if (!Number.isInteger(state.me)) {
+      return '<p class="ph-empty">내 좋아요를 보려면 <b>프로필</b> 탭에서 "나는 누구?"를 먼저 골라 주세요.</p>';
+    }
+    var list = P.likedBy(state.photos, state.me);
+    if (!list.length) {
+      return '<div class="ph-m-empty"><span class="big">♡</span><b>내가 좋아요한 사진이 없어요</b>사진을 크게 보고 ♡를 누르면 여기에 모여요.</div>';
+    }
+    return '<div class="ph-m-head"><span>내가 좋아요한 사진</span><span>' + list.length + '장</span></div>' +
+      '<div class="ph-m-grid">' + list.map(cellHtml).join('') + '</div>';
+  }
+
+  var AVATAR_COLORS = ['#c2703f', '#2f5233', '#4e6f8f', '#8a6aa0', '#a0763a', '#3f7f7a', '#9a4f5c'];
+  function avatarHtml(id, name) {
+    var color = id === null || id === undefined ? '#9a917c' : AVATAR_COLORS[Math.abs(id) % AVATAR_COLORS.length];
+    return '<span class="ph-m-avatar" style="background:' + color + '">' + esc(String(name || '?').slice(0, 1)) + '</span>';
   }
 
   // ---------------------------------------------------------------------------
@@ -672,13 +829,20 @@
     }).join('');
     els.pending.innerHTML =
       '<div class="ph-pend-head"><b>올릴 사진·영상 ' + state.pending.length + '개</b>' +
-      (state.me === null ? ' <span class="ph-err">— 위에서 "나는 누구?"를 먼저 골라 주세요</span>' : '') + '</div>' +
+      (state.me === null ? ' <span class="ph-err">— "나는 누구?"를 먼저 골라 주세요</span> ' + pendingMeSelectHtml() : '') + '</div>' +
       rows +
       '<div class="ph-pend-actions">' +
       '<button type="button" class="st-btn" data-action="upload"' + (state.uploading || !readyCount ? ' disabled' : '') + '>' +
       (state.uploading ? '올리는 중…' : readyCount + '개 ' + (retrying ? '다시 올리기' : '올리기')) + '</button>' +
       '<button type="button" class="st-linkbtn" data-action="clear"' + (state.uploading ? ' disabled' : '') + '>모두 취소</button>' +
       '</div>';
+  }
+
+  function pendingMeSelectHtml() {
+    if (!state.travelers.length) return '';
+    return '<select data-pend-me aria-label="나는 누구?"><option value="">나는 누구?</option>' + state.travelers.map(function (t) {
+      return '<option value="' + t.id + '">나는 ' + esc(t.name) + '</option>';
+    }).join('') + '</select>';
   }
 
   function renderPendingProgress(item) {
@@ -693,12 +857,128 @@
     state.lightboxId = id;
     els.lightbox.hidden = false;
     document.body.classList.add('ph-noscroll');
-    renderLightbox();
+    if (isMobile()) openFeed(id);
+    else renderLightbox();
     els.lightbox.focus();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 모바일 크게 보기: 위아래로 넘기는 세로 피드 + 오른쪽 ♡·💬·ⓘ, 정보·댓글은 아래 시트
+  // ---------------------------------------------------------------------------
+  var feed = null; // { ids: [], observer }
+
+  function slideMediaHtml(p) {
+    if (p.mediaType === 'video') {
+      return '<video src="' + esc(p.url) + '" poster="' + esc(p.thumbUrl) + '" controls playsinline preload="none"></video>';
+    }
+    return '<img src="' + esc(p.url) + '" alt="' + esc(p.caption || '여행 사진') + '" loading="lazy">';
+  }
+
+  function railHtml(p) {
+    var on = P.hasLiked(p, state.me);
+    var cmt = comments[p.id] && comments[p.id].loaded ? comments[p.id].list.length : (p.commentCount || 0);
+    return '<button type="button" data-action="like" aria-pressed="' + on + '" aria-label="좋아요">' + ICONS.heart + '<span>' + (p.likeCount || 0) + '</span></button>' +
+      '<button type="button" data-action="sheet-comments" aria-label="댓글">' + ICONS.comment + '<span>' + cmt + '</span></button>' +
+      '<button type="button" data-action="sheet-info" aria-label="사진 정보">' + ICONS.info + '<span>정보</span></button>';
+  }
+
+  function slideMetaHtml(p) {
+    var where = p.placeName ? ' · 📍 ' + esc(p.placeName) : '';
+    var day = p.day ? ' · DAY ' + p.day : '';
+    return avatarHtml(p.uploaderId, nameOf(p.uploaderId)) + '<div><b>' + esc(nameOf(p.uploaderId)) + '</b>' +
+      '<span>' + esc(formatWhen(p.takenAt)) + day + where + '</span>' +
+      (p.caption ? '<p>' + esc(p.caption) + '</p>' : '') + '</div>';
+  }
+
+  function slideHtml(p) {
+    return '<section class="ph-slide" data-id="' + p.id + '">' +
+      '<div class="ph-slide-media">' + slideMediaHtml(p) + '</div>' +
+      '<div class="ph-slide-meta" data-slot="meta">' + slideMetaHtml(p) + '</div>' +
+      '<div class="ph-rail" data-slot="rail">' + railHtml(p) + '</div></section>';
+  }
+
+  function openFeed(id) {
+    var list = visiblePhotos();
+    if (!list.some(function (p) { return p.id === id; })) list = P.sortByTakenAt(state.photos);
+    feed = { ids: list.map(function (p) { return p.id; }), observer: null };
+    state.sheet = null;
+    els.lightbox.classList.add('feed');
+    els.lightbox.innerHTML =
+      '<div class="ph-feed-top"><button type="button" class="ph-lb-close" data-action="close" aria-label="닫기">×</button>' +
+      '<span class="ph-lb-count" data-slot="count"></span><span class="ph-feed-spacer"></span></div>' +
+      '<div class="ph-feed" data-slot="feed">' + list.map(slideHtml).join('') + '</div>' +
+      '<div data-slot="sheet"></div>';
+    var box = els.lightbox.querySelector('[data-slot="feed"]');
+    var idx = feed.ids.indexOf(id);
+    box.scrollTop = box.clientHeight * Math.max(0, idx);
+    updateFeedCount();
+    if ('IntersectionObserver' in window) {
+      feed.observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          var v = en.target.querySelector('video');
+          if (!en.isIntersecting && v && !v.paused) v.pause();
+          if (en.isIntersecting && en.intersectionRatio >= 0.6 && !state.sheet) {
+            state.lightboxId = Number(en.target.getAttribute('data-id'));
+            state.editingMeta = false;
+            updateFeedCount();
+          }
+        });
+      }, { root: box, threshold: [0, 0.6] });
+      Array.prototype.forEach.call(box.children, function (el) { feed.observer.observe(el); });
+    }
+  }
+
+  function updateFeedCount() {
+    var el = els.lightbox.querySelector('[data-slot="count"]');
+    if (!el || !feed) return;
+    el.textContent = (feed.ids.indexOf(state.lightboxId) + 1) + ' / ' + feed.ids.length;
+  }
+
+  function closeFeed() {
+    if (feed && feed.observer) feed.observer.disconnect();
+    feed = null;
+    state.sheet = null;
+    els.lightbox.classList.remove('feed');
+  }
+
+  /** 피드 전체를 다시 만들지 않고 (스크롤 위치 유지) 지금 사진의 버튼 숫자와 시트만 새로 그립니다. */
+  function renderFeedParts() {
+    var p = photoById(state.lightboxId);
+    if (!p) { closeLightbox(); return; }
+    var slide = els.lightbox.querySelector('.ph-slide[data-id="' + p.id + '"]');
+    if (slide) {
+      slide.querySelector('[data-slot="rail"]').innerHTML = railHtml(p);
+      slide.querySelector('[data-slot="meta"]').innerHTML = slideMetaHtml(p);
+    }
+    renderSheet();
+  }
+
+  function renderSheet() {
+    var box = els.lightbox.querySelector('[data-slot="sheet"]');
+    if (!box) return;
+    var p = photoById(state.lightboxId);
+    if (!state.sheet || !p) { box.innerHTML = ''; return; }
+    var mine = P.canModify(p, state.me);
+    var body;
+    if (state.sheet === 'comments') {
+      body = commentsSectionHtml(p);
+    } else {
+      body = '<div class="ph-sheet-title">사진 정보</div>' +
+        (p.likeCount ? '<div class="ph-likers">♥ ' + esc(P.likeSummary(p.likedBy, nameOf)) + '</div>' : '') +
+        (p.caption ? '<p class="ph-lb-caption">' + esc(p.caption) + '</p>' : '') +
+        infoPanelHtml(p, mine) +
+        (state.editingMeta ? '' : '<div class="ph-lb-actions">' +
+          '<a class="ph-act" href="' + esc(p.url) + '?download=1" download>⬇ 다운로드</a>' +
+          (mine ? '<button type="button" class="ph-act danger" data-action="delete">🗑 삭제</button>' : '') + '</div>');
+    }
+    box.innerHTML = '<div class="ph-sheet-scrim" data-action="sheet-close"><div class="ph-sheet" role="dialog" aria-modal="true" aria-label="' +
+      (state.sheet === 'comments' ? '댓글' : '사진 정보') + '"><span class="ph-sheet-grab" aria-hidden="true"></span>' + body + '</div></div>';
+    if (state.sheet === 'comments') ensureComments(p.id);
   }
 
   function closeLightbox() {
     if (state.lightboxId === null) return;
+    closeFeed();
     state.lightboxId = null;
     state.editingMeta = false;
     editingCommentId = null;
@@ -710,6 +990,11 @@
   }
 
   function step(delta) {
+    if (feed) {
+      var box = els.lightbox.querySelector('[data-slot="feed"]');
+      if (box) box.scrollBy({ top: delta * box.clientHeight, behavior: 'smooth' });
+      return;
+    }
     var list = visiblePhotos();
     var idx = list.findIndex(function (p) { return p.id === state.lightboxId; });
     if (idx < 0 || list.length < 2) return;
@@ -731,6 +1016,7 @@
   var lightboxExtras = [];
 
   function renderLightbox() {
+    if (feed) { renderFeedParts(); return; }
     var p = photoById(state.lightboxId);
     if (!p) { closeLightbox(); return; }
     var list = visiblePhotos();
@@ -866,6 +1152,11 @@
     var count = els.lightbox.querySelector('[data-slot="comment-count"]');
     if (list) list.innerHTML = commentListHtml(photoId);
     if (count && comments[photoId] && comments[photoId].loaded) count.textContent = comments[photoId].list.length;
+    if (feed) {
+      var rail = els.lightbox.querySelector('.ph-slide[data-id="' + photoId + '"] [data-slot="rail"]');
+      var p = photoById(photoId);
+      if (rail && p) rail.innerHTML = railHtml(p);
+    }
   }
 
   function syncCommentCount(photoId) {
@@ -1019,6 +1310,10 @@
         return;
       }
       var a = t.getAttribute('data-action');
+      var slide = t.closest('.ph-slide');
+      if (slide) state.lightboxId = Number(slide.getAttribute('data-id'));
+      // 시트 바깥(어두운 부분)을 눌렀을 때만 닫기
+      if (a === 'sheet-close' && e.target !== t && !e.target.closest('.ph-sheet-x')) return;
       if (a === 'close') closeLightbox();
       else if (a === 'prev') step(-1);
       else if (a === 'next') step(1);
@@ -1036,9 +1331,12 @@
         }
         return;
       }
-      if (e.key === 'Escape') closeLightbox();
-      else if (e.key === 'ArrowLeft') step(-1);
-      else if (e.key === 'ArrowRight') step(1);
+      if (e.key === 'Escape') {
+        if (state.sheet) lightboxActions['sheet-close']();
+        else closeLightbox();
+      }
+      else if (e.key === 'ArrowLeft' || (feed && e.key === 'ArrowUp')) { if (feed) e.preventDefault(); step(-1); }
+      else if (e.key === 'ArrowRight' || (feed && e.key === 'ArrowDown')) { if (feed) e.preventDefault(); step(1); }
     });
     els.lightbox.addEventListener('submit', function (e) {
       var f = e.target;
@@ -1180,6 +1478,22 @@
     like: function () {
       toggleLike(state.lightboxId);
     },
+    'sheet-comments': function () {
+      state.sheet = 'comments';
+      state.editingMeta = false;
+      renderSheet();
+    },
+    'sheet-info': function () {
+      state.sheet = 'info';
+      state.editingMeta = false;
+      renderSheet();
+    },
+    'sheet-close': function () {
+      state.sheet = null;
+      state.editingMeta = false;
+      editingCommentId = null;
+      renderSheet();
+    },
     info: function () {
       state.infoOpen = !state.infoOpen;
       if (!state.infoOpen) state.editingMeta = false;
@@ -1213,9 +1527,7 @@
     els.me.addEventListener('change', function (e) {
       if (e.target.id !== 'ph-me-select') return;
       var v = parseInt(e.target.value, 10);
-      saveMe(Number.isInteger(v) ? v : null);
-      renderPending();
-      if (state.lightboxId !== null) renderLightbox();
+      setMe(Number.isInteger(v) ? v : null);
     });
 
     els.file.addEventListener('change', function () {
@@ -1233,8 +1545,38 @@
 
     els.grid.addEventListener('click', function (e) {
       var cell = e.target.closest('.ph-cell');
-      if (cell) openLightbox(Number(cell.getAttribute('data-id')));
+      if (cell) { openLightbox(Number(cell.getAttribute('data-id'))); return; }
+      var album = e.target.closest('[data-album]');
+      if (album) {
+        var parts = album.getAttribute('data-album').split(':');
+        var key = parts[1] === 'null' ? null : parts[1] === 'etc' ? 'etc' : Number(parts[1]);
+        state.album = { type: parts[0], key: key };
+        render();
+        els.root.scrollIntoView({ block: 'start' });
+        return;
+      }
+      if (e.target.closest('[data-album-back]')) { state.album = null; render(); return; }
+      var gb = e.target.closest('[data-groupby]');
+      if (gb) { state.groupBy = gb.getAttribute('data-groupby'); render(); return; }
+      if (e.target.closest('[data-m-action="reel"]')) { var rb = document.getElementById('ph-reel-btn'); if (rb) rb.click(); }
     });
+
+    els.mtabs.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-mview]');
+      if (!b) return;
+      state.mview = b.getAttribute('data-mview');
+      state.album = null;
+      render();
+    });
+
+    if (mobileQuery) {
+      var onQuery = function () {
+        if (state.lightboxId !== null) closeLightbox();
+        render();
+      };
+      if (mobileQuery.addEventListener) mobileQuery.addEventListener('change', onQuery);
+      else if (mobileQuery.addListener) mobileQuery.addListener(onQuery);
+    }
 
     els.pending.addEventListener('click', function (e) {
       var rm = e.target.closest('[data-remove]');
@@ -1269,6 +1611,11 @@
       }
     });
     els.pending.addEventListener('change', function (e) {
+      if (e.target.hasAttribute('data-pend-me')) {
+        var me = parseInt(e.target.value, 10);
+        setMe(Number.isInteger(me) ? me : null);
+        return;
+      }
       var field = e.target.getAttribute('data-field');
       var it = state.pending.find(function (x) { return x.key === e.target.getAttribute('data-key'); });
       if (!it) return;
@@ -1299,6 +1646,14 @@
     bindLightbox();
   }
 
+  /** 나는 누구 바꾸기 (PC 드롭다운 · 업로드 목록 · 모바일 프로필 탭이 함께 씀). */
+  function setMe(id) {
+    saveMe(id);
+    render();
+    renderPending();
+    if (state.lightboxId !== null) renderLightbox();
+  }
+
   function init() {
     els.root = $('#photos');
     if (!els.root) return;
@@ -1308,6 +1663,7 @@
     els.pending = $('#ph-pending', els.root);
     els.tabs = $('#ph-tabs', els.root);
     els.grid = $('#ph-grid', els.root);
+    els.mtabs = $('#ph-mtabs', els.root);
     els.lightbox = $('#ph-lightbox');
     state.me = readMe();
     bind();
@@ -1338,6 +1694,10 @@
     uploadBlob: uploadBlob,
     applyTimeAndPlace: applyTimeAndPlace,
     randId: randId,
+    setMe: setMe,
+    isMobile: isMobile,
+    pickFiles: function () { els.file.click(); },
+    onChange: function (fn) { listeners.push(fn); },
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

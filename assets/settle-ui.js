@@ -88,7 +88,7 @@
 
   async function deleteTraveler(id) {
     var t = state.travelers.find(function (x) { return x.id === id; });
-    if (!confirm('‘' + (t ? t.name : '') + '’ 여행자를 삭제할까요?\n이 사람이 결제했거나 참여한 지출 기록도 함께 정리됩니다.')) return;
+    if (!confirm('‘' + (t ? t.name : '') + '’ 여행자를 삭제할까요?\n(지출 기록에 들어 있는 사람은 뺄 수 없어요)')) return;
     await api('/travelers?id=' + id, { method: 'DELETE' });
     await load();
   }
@@ -297,7 +297,14 @@
       '<div class="st-transfers">' + transferHtml + '</div>';
   }
 
+  // 모바일 '사람' 탭처럼 같은 데이터를 쓰는 화면이 다시 그릴 수 있게 알려 줍니다.
+  var listeners = [];
+  function notify() {
+    listeners.forEach(function (fn) { try { fn(state); } catch (e) { console.error(e); } });
+  }
+
   function render() {
+    notify();
     if (state.loading) {
       els.status.textContent = '불러오는 중…';
       els.status.className = 'st-status loading';
@@ -459,6 +466,14 @@
     bind();
     load();
   }
+
+  window.SettleUI = {
+    state: state,
+    reload: load,
+    addTraveler: addTraveler,
+    deleteTraveler: deleteTraveler,
+    onChange: function (fn) { listeners.push(fn); },
+  };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

@@ -495,3 +495,32 @@ test('여행 첫날(places.js)이 정해져 있어 촬영 날짜가 일차로 �
   assert.equal(P.suggestDay('2026-09-26T03:00:00Z', TripPlaces.TRIP_START_DATE), 3);
   assert.equal(P.suggestDay('2026-09-27T03:00:00Z', TripPlaces.TRIP_START_DATE), null);
 });
+
+// ---- 모바일 사진첩: 모아보기 · 좋아요 ------------------------------------------
+
+const albumPhotos = [
+  { id: 1, uploaderId: 5, day: 1, takenAt: '2026-09-24T03:00:00Z', likedBy: [5] },
+  { id: 2, uploaderId: 4, day: 2, takenAt: '2026-09-25T03:00:00Z', likedBy: [] },
+  { id: 3, uploaderId: 5, day: 1, takenAt: '2026-09-24T01:00:00Z', likedBy: [4, 5] },
+  { id: 4, uploaderId: 99, day: null, takenAt: null, likedBy: [4] },
+];
+const albumTravelers = [{ id: 2, name: '단해' }, { id: 4, name: '정환' }, { id: 5, name: '미솔' }];
+
+test('groupByUploader: 사진 많은 사람부터, 사진 없는 사람도 포함, 모르는 사람은 맨 뒤', () => {
+  const g = P.groupByUploader(albumPhotos, albumTravelers);
+  assert.deepEqual(g.map((x) => [x.name, x.photos.map((p) => p.id)]), [
+    ['미솔', [3, 1]], ['정환', [2]], ['단해', []], ['알 수 없음', [4]],
+  ]);
+});
+
+test('groupByDay: 여행 일수만큼 + 일차 없는 사진은 etc', () => {
+  const g = P.groupByDay(albumPhotos, 3);
+  assert.deepEqual(g.map((x) => [x.day, x.photos.map((p) => p.id)]), [[1, [3, 1]], [2, [2]], [3, []], ['etc', [4]]]);
+  assert.equal(P.groupByDay(albumPhotos.slice(0, 3), 3).length, 3);
+});
+
+test('likedBy: 내가 좋아요한 사진만, 나를 모르면 빈 목록', () => {
+  assert.deepEqual(P.likedBy(albumPhotos, 5).map((p) => p.id), [3, 1]);
+  assert.deepEqual(P.likedBy(albumPhotos, 4).map((p) => p.id), [3, 4]);
+  assert.deepEqual(P.likedBy(albumPhotos, null), []);
+});

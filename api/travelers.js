@@ -1,6 +1,7 @@
 // /api/travelers
 //   POST   { name }        → 여행자 추가
-//   DELETE ?id=123         → 여행자 삭제 (관련 지출 분담/결제자 정보도 정리됨)
+//   DELETE ?id=123         → 여행자 삭제. 지출 기록(결제자·나눠 낸 사람)에 들어 있으면 409 로 막아요
+//                            (빼면 다른 사람들의 정산 금액이 달라지기 때문)
 const { sql, ensureSchema, sendError } = require('./_db');
 
 // req.body 가 문자열로 올 수도, 이미 파싱돼 올 수도 있어 안전하게 처리합니다.
@@ -37,6 +38,19 @@ module.exports = async function handler(req, res) {
       const id = parseInt(req.query.id, 10);
       if (!Number.isInteger(id)) {
         return res.status(400).json({ error: '삭제할 여행자 id가 필요합니다.' });
+      }
+      const used = await sql`
+        SELECT
+          (SELECT COUNT(*) FROM expenses WHERE payer_id = ${id}) AS paid,
+          (SELECT COUNT(*) FROM expense_splits WHERE traveler_id = ${id}) AS shared`;
+      const paid = Number(used.rows[0].paid);
+      const shared = Number(used.rows[0].shared);
+      if (paid + shared > 0) {
+        return res.status(409).json({
+          error: `지출 기록에 들어 있어서 뺄 수 없어요 (결제 ${paid}건 · 나눠 냄 ${shared}건). 먼저 그 기록에서 빼거나 기록을 지워 주세요.`,
+          paid,
+          shared,
+        });
       }
       await sql`DELETE FROM travelers WHERE id = ${id}`;
       return res.status(200).json({ ok: true });

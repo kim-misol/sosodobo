@@ -137,6 +137,42 @@
   }
 
   /** day: 'all' | 1..3 (숫자/문자열) | 'etc'(일차 미지정). */
+  /**
+   * 올린 사람별 묶음 (모바일 사진첩 '모아보기'). 여행자 순서를 기본으로, 사진이 많은 사람부터.
+   * 올린 사람을 모르는 사진이 있으면 맨 뒤에 id=null 묶음으로.
+   * → [{ id, name, photos: [...촬영 순] }]
+   */
+  function groupByUploader(list, travelers) {
+    var sorted = sortByTakenAt(list);
+    var groups = (travelers || []).map(function (t, i) {
+      return { id: t.id, name: t.name, order: i, photos: sorted.filter(function (p) { return p.uploaderId === t.id; }) };
+    });
+    var known = {};
+    (travelers || []).forEach(function (t) { known[t.id] = true; });
+    var orphans = sorted.filter(function (p) { return !known[p.uploaderId]; });
+    groups.sort(function (a, b) { return (b.photos.length - a.photos.length) || (a.order - b.order); });
+    var out = groups.map(function (g) { return { id: g.id, name: g.name, photos: g.photos }; });
+    if (orphans.length) out.push({ id: null, name: '알 수 없음', photos: orphans });
+    return out;
+  }
+
+  /** 일차별 묶음: 1..tripDays(사진이 없어도 포함) + 일차 없는 사진이 있으면 'etc'. → [{ day, photos }] */
+  function groupByDay(list, tripDays) {
+    var days = tripDays || LIMITS.tripDays;
+    var sorted = sortByTakenAt(list);
+    var out = [];
+    for (var d = 1; d <= days; d++) out.push({ day: d, photos: filterByDay(sorted, d) });
+    var etc = filterByDay(sorted, 'etc');
+    if (etc.length) out.push({ day: 'etc', photos: etc });
+    return out;
+  }
+
+  /** 내가 좋아요한 사진만 (촬영 순). 나를 모르면 빈 목록. */
+  function likedBy(list, travelerId) {
+    if (!Number.isInteger(travelerId)) return [];
+    return sortByTakenAt(list).filter(function (p) { return hasLiked(p, travelerId); });
+  }
+
   function filterByDay(list, day) {
     var arr = list || [];
     if (day === 'all' || day === undefined || day === null) return arr.slice();
@@ -596,6 +632,9 @@
     classifyFile: classifyFile,
     pickTakenAt: pickTakenAt,
     suggestDay: suggestDay,
+    groupByUploader: groupByUploader,
+    groupByDay: groupByDay,
+    likedBy: likedBy,
     dayDate: dayDate,
     formatDayDate: formatDayDate,
     kstDateString: kstDateString,
