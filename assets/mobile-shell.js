@@ -90,7 +90,7 @@
       if (x[0] === 'camera') {
         return '<button type="button" class="m-fab" data-m-upload aria-label="사진·영상 올리기">' + ICONS.camera + '</button>';
       }
-      return '<button type="button" role="tab" data-m-tab="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">' + ICONS[x[0]] + '<span>' + x[1] + '</span></button>';
+      return '<button type="button" role="tab" data-m-tab="' + x[0] + '" aria-selected="' + (tab === x[0]) + '" aria-label="' + x[1] + '">' + ICONS[x[0]] + '</button>';
     }).join('');
     if (els.status) els.status.textContent = statusText();
     document.documentElement.style.setProperty('--m-top-h', els.top.offsetHeight + 'px');
