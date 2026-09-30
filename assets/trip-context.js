@@ -87,6 +87,15 @@
     var brand = document.querySelector('.nav-brand span:last-child');
     if (brand) brand.textContent = t.title;
     if (!legacy) renderTripHero(t);
+    else {
+      // 남해 여행은 예전 표지를 그대로 쓰되, 작은 라벨은 다른 여행처럼 날짜로
+      var eyebrow = document.querySelector('#top .eyebrow');
+      if (eyebrow) eyebrow.textContent = eyebrowLabel(t);
+    }
+  }
+
+  function eyebrowLabel(t) {
+    return (window.ShellCore ? window.ShellCore.dateRangeLabel(t.startDate, t.days) : t.startDate) + ' · ' + t.days + '일';
   }
 
   /** 옛 페이지가 아닌 여행: 위쪽 여행 카드와 날짜 카드를 여행 정보로 */
@@ -94,7 +103,7 @@
     var head = document.getElementById('top');
     if (head) {
       var status = document.getElementById('m-trip-status');
-      head.innerHTML = '<div class="eyebrow">' + esc(window.ShellCore ? window.ShellCore.dateRangeLabel(t.startDate, t.days) : t.startDate) + ' · ' + t.days + '일</div>' +
+      head.innerHTML = '<div class="eyebrow">' + esc(eyebrowLabel(t)) + '</div>' +
         '<h1>' + esc(t.title) + '</h1>' + (t.summary ? '<p>' + esc(t.summary) + '</p>' : '') +
         '<div class="summary"><span>📍 ' + esc(t.region) + '</span><span>🗓 ' + t.days + '일' + (t.days > 1 ? ' (' + (t.days - 1) + '박)' : '') + '</span>' +
         (t.memberCount ? '<span>👥 ' + t.memberCount + '명</span>' : '') + '</div>';
