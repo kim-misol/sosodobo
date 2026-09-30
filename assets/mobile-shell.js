@@ -35,9 +35,9 @@
     return s.travelers.length ? s.travelers : photoState().travelers;
   }
 
-  var AVATAR_COLORS = ['#c2703f', '#2f5233', '#4e6f8f', '#8a6aa0', '#a0763a', '#3f7f7a', '#9a4f5c'];
+  var AVATAR_COLORS = ['#FFB997', '#D4CCF2', '#B5DFCB', '#DDEFE8', '#FFE4D6', '#EEEAFB', '#CFE3D9'];
   function avatar(id, name, cls) {
-    var color = Number.isInteger(id) ? AVATAR_COLORS[Math.abs(id) % AVATAR_COLORS.length] : '#9a917c';
+    var color = Number.isInteger(id) ? AVATAR_COLORS[Math.abs(id) % AVATAR_COLORS.length] : '#EEF1EC';
     return '<span class="m-avatar ' + (cls || '') + '" style="background:' + color + '">' + esc(String(name || '?').slice(0, 1)) + '</span>';
   }
 

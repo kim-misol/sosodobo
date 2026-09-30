@@ -467,9 +467,9 @@
     canvas.width = 480;
     canvas.height = 360;
     var ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#2f5233';
+    ctx.fillStyle = '#36405A';
     ctx.fillRect(0, 0, 480, 360);
-    ctx.fillStyle = '#f5efdb';
+    ctx.fillStyle = '#FDFBF5';
     ctx.beginPath();
     ctx.moveTo(205, 140); ctx.lineTo(205, 220); ctx.lineTo(275, 180); ctx.closePath();
     ctx.fill();
@@ -737,9 +737,9 @@
       '<div class="ph-m-grid">' + list.map(cellHtml).join('') + '</div>';
   }
 
-  var AVATAR_COLORS = ['#c2703f', '#2f5233', '#4e6f8f', '#8a6aa0', '#a0763a', '#3f7f7a', '#9a4f5c'];
+  var AVATAR_COLORS = ['#FFB997', '#D4CCF2', '#B5DFCB', '#DDEFE8', '#FFE4D6', '#EEEAFB', '#CFE3D9'];
   function avatarHtml(id, name) {
-    var color = id === null || id === undefined ? '#9a917c' : AVATAR_COLORS[Math.abs(id) % AVATAR_COLORS.length];
+    var color = id === null || id === undefined ? '#EEF1EC' : AVATAR_COLORS[Math.abs(id) % AVATAR_COLORS.length];
     return '<span class="ph-m-avatar" style="background:' + color + '">' + esc(String(name || '?').slice(0, 1)) + '</span>';
   }
 
