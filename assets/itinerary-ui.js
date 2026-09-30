@@ -73,7 +73,7 @@
     if (c.durationText) rows.push(['걷는 시간', c.durationText]);
     if (c.difficulty) rows.push(['난이도', I.stars(c.difficulty)]);
     var links = mapLinkHtml(c.mapUrl, c.mapProvider) + (c.linkUrl ? mapLinkHtml(c.linkUrl, null, '코스 안내') : '');
-    return '<div class="block"><h3>🚶 도보 코스' + (total > 1 ? ' ' + (CIRCLED[idx] || idx + 1) : '') + ' — ' + esc(c.name) + '</h3>' +
+    return '<div class="block"><h3>🚶 여행 코스' + (total > 1 ? ' ' + (CIRCLED[idx] || idx + 1) : '') + ' — ' + esc(c.name) + '</h3>' +
       '<div class="course-card' + (c.imageUrl ? '' : ' no-img') + '">' +
       (c.imageUrl ? '<img src="' + esc(c.imageUrl) + '" alt="' + esc(c.name) + ' 지도" loading="lazy">' : '') +
       '<div class="course-meta"><div class="name">' + esc(c.name.replace(/^\d+코스\s+/, '')) + (c.subtitle ? ' (' + esc(c.subtitle) + ')' : '') + '</div>' +
