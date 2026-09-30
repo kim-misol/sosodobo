@@ -1237,6 +1237,14 @@
     font-size:12.5px;font-weight:700;border-radius:999px;padding:3px 12px;}
   .m-trip-status:empty{display:none;}
 
+  /* 날씨 (weather-ui.js): 표지 요약 · 날짜 카드 한 줄 */
+  .wx-summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:14px 0 0;padding:7px 14px;border-radius:14px;
+    background:rgba(253,251,245,.92);border:1.5px solid var(--navy);font-size:14px;font-weight:600;color:var(--ink);max-width:560px;}
+  .wx-summary .wx-where{font-size:12px;font-weight:500;color:var(--sub);}
+  .it-wx{display:flex;flex-wrap:wrap;gap:4px 12px;margin:8px 0 4px;font-size:13px;color:#4F5870;font-variant-numeric:tabular-nums;}
+  .it-wx .wx-main{font-weight:700;color:var(--ink);}
+  .it-wx .wx-note{color:var(--sub);}
+
   /* 섹션 제목 */
   .section-intro{align-items:center;}
   .section-intro .icon{width:40px;height:40px;background:var(--mint);}
@@ -1315,6 +1323,8 @@
     header#top p{color:#4F5870;font-size:13.5px;max-width:70%;}
     header#top .summary{display:none;} /* 날짜 · 인원은 위쪽 여행 바에 있어서, 폰에서는 풍경을 보여 줌 */
     header#top .m-trip-status{margin-top:auto;}
+    header#top .wx-summary{margin-top:auto;font-size:12.5px;padding:5px 11px;}
+    header#top .wx-summary ~ .m-trip-status{margin-top:8px;}
     header#top .summary span{background:rgba(253,251,245,.92);border:1.5px solid var(--navy);color:var(--ink);padding:3px 10px;font-size:12px;}
     .section-intro h2{font-size:23px;}
     .timeline{padding-left:40px;background-position:15px 34px;}
@@ -1540,8 +1550,10 @@
 <script src="assets/trip-ui.js"></script>
 <script src="assets/itinerary-core.js"></script>
 <script src="assets/docs-core.js"></script>
+<script src="assets/weather-core.js"></script>
 <script src="assets/itinerary-ui.js"></script>
 <script src="assets/docs-ui.js"></script>
+<script src="assets/weather-ui.js"></script>
 <script src="assets/mobile-shell.js"></script>
 <script>
   document.querySelectorAll('.carousel').forEach(function (el) {

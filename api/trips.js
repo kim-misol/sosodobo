@@ -1,6 +1,7 @@
 // /api/trips  (여러 여행)
 //   GET                          → 내가 참여한 여행 목록 (로그인이 꺼져 있으면 전체)
 //   GET    ?id=5                 → 여행 정보 + 나의 역할 (참여자, 또는 링크 공개면 누구나)
+//   GET    ?id=5&part=weather    → 날짜별 날씨 · 일출/일몰 (api/_weather.js)
 //   POST   { title, region, startDate, endDate, summary?, visibility?, myName? } → 새 여행 (만든 사람 = 관리자)
 //   PATCH  ?id=5 { title?, region?, startDate?, endDate?, summary?, visibility?, membersCanEdit? } → 수정 (관리자)
 //   DELETE ?id=5                 → 삭제 (관리자) — 사람·지출·준비물·사진 모두 지워지고 사진 파일도 정리
@@ -28,6 +29,7 @@
 const { del } = require('@vercel/blob');
 const { sql, ensureSchema, sendError, randomJoinCode } = require('./_db');
 const A = require('./_auth');
+const { tripWeather } = require('./_weather');
 const TripCore = require('../assets/trip-core.js');
 const I = require('../assets/itinerary-core.js');
 const DocsCore = require('../assets/docs-core.js');
@@ -495,6 +497,16 @@ async function handler(req, res) {
     if (!row) return res.status(404).json({ error: '여행을 찾을 수 없어요.', code: 'no_trip' });
     const member = !on || !!row.traveler_id;
     const admin = !on || row.role === 'admin';
+
+    // ---- 날씨 · 일출/일몰 (여행을 볼 수 있는 사람이면) ----
+    if (part === 'weather' && req.method === 'GET') {
+      if (!member && row.visibility !== 'link') {
+        return res.status(on && !uid ? 401 : 403).json({ error: '이 여행에 참여한 뒤에 볼 수 있어요.', code: on && !uid ? 'login_required' : 'join_required' });
+      }
+      const weather = await tripWeather(A.tripInfo(row), { sql });
+      res.setHeader('Cache-Control', 'private, max-age=1800');
+      return res.status(200).json(weather);
+    }
 
     // ---- 티켓 · 예약 ----
     if (part === 'docs' || part === 'doc') return handleDocs(req, res, row, { on, uid, member, admin });

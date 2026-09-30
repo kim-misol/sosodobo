@@ -135,6 +135,7 @@
     var out = '<section class="day" data-day="' + day.dayNo + '">' +
       '<div class="it-day-head"><span class="day-label">DAY ' + day.dayNo + '</span><span class="it-date">' + esc(day.dateLabel) + '</span>' +
       (state.data.canEdit ? '<button type="button" class="it-edit" data-it="edit-day" data-day="' + day.dayNo + '">✎ 일정 편집</button>' : '') + '</div>' +
+      (window.WeatherUI ? window.WeatherUI.dayLine(day.date) : '') +
       (day.title ? '<h2>' + esc(day.title) + '</h2>' : '') +
       (day.summary ? '<p class="desc">' + esc(day.summary) + '</p>' : '');
     if (empty) {

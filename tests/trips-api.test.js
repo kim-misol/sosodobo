@@ -398,3 +398,52 @@ test('티켓 고치기 · 지우기: 올린 사람과 관리자만, 빠진 파�
     assert.equal(sql.calls.find((c) => c.text.startsWith('UPDATE trip_docs SET')).values[1], '새 제목');
   });
 });
+
+// ---- 날씨 (api/_weather.js) ----
+test('tripWeather: 지역 → 좌표(저장) · 가까운 날은 예보, 먼 날은 일출·일몰만, 같은 요청은 기억', async () => {
+  const { tripWeather, _cache } = require('../api/_weather.js');
+  _cache.clear();
+  const meta = {};
+  const sql = async (strings, ...values) => {
+    const text = strings.join('?');
+    if (text.startsWith('SELECT value FROM app_meta')) return { rows: meta[values[0]] ? [{ value: meta[values[0]] }] : [] };
+    if (text.startsWith('INSERT INTO app_meta')) { meta[values[0]] = values[1]; return { rows: [] }; }
+    return { rows: [] };
+  };
+  const urls = [];
+  const fetchImpl = async (url) => {
+    urls.push(url);
+    if (url.includes('nominatim')) return { ok: true, json: async () => [{ lat: '35.18', lon: '129.07', display_name: '부산광역시, 대한민국' }] };
+    return { ok: true, json: async () => ({ utc_offset_seconds: 32400, daily: {
+      time: ['2026-10-15', '2026-10-16'], weather_code: [0, 61], temperature_2m_max: [25, 22], temperature_2m_min: [17, 18],
+      precipitation_probability_max: [0, 80], sunrise: ['2026-10-15T06:30', '2026-10-16T06:31'], sunset: ['2026-10-15T17:55', '2026-10-16T17:54'],
+    } }) };
+  };
+  const now = () => Date.parse('2026-10-01T03:00:00Z');
+  const trip = { id: 2, region: '부산', startDate: '2026-10-15', days: 3 };
+  const r = await tripWeather(trip, { sql, fetch: fetchImpl, now, wait: async () => {} });
+  assert.equal(r.location.name, '부산광역시');
+  assert.equal(r.days.length, 3);
+  assert.equal(r.days[0].kind, 'forecast');
+  assert.equal(r.days[0].sunrise, '06:30');
+  assert.equal(r.days[1].code, 61);
+  assert.equal(r.days[2].kind, 'far');
+  assert.equal(r.days[2].code, null);
+  assert.match(r.days[2].sunrise, /^0[5-7]:\d\d$/, '먼 날은 계산한 일출');
+  assert.equal(r.forecastOpensOn, '2026-10-02');
+  assert.ok(meta['geo:부산'], '좌표 저장');
+  assert.ok(urls.some((u) => u.includes('api.open-meteo.com/v1/forecast') && u.includes('start_date=2026-10-15&end_date=2026-10-16')));
+  const count = urls.length;
+  await tripWeather(trip, { sql, fetch: fetchImpl, now, wait: async () => {} });
+  assert.equal(urls.length, count, '두 번째는 기억해 둔 값');
+});
+
+test('GET /api/trips?id=&part=weather: 비공개 여행은 참여자만', async () => {
+  await withEnv(ENV, async () => {
+    const outsider = tripRow({ traveler_id: null, role: null });
+    const res = await call(loadHandler('trips.js', sqlFor(outsider), { '@vercel/blob': blob }), { method: 'GET', query: { id: '5', part: 'weather' }, headers: { cookie: cookie(9) } });
+    assert.equal(res.statusCode, 403);
+    const anon = await call(loadHandler('trips.js', sqlFor(outsider), { '@vercel/blob': blob }), { method: 'GET', query: { id: '5', part: 'weather' } });
+    assert.equal(anon.statusCode, 401);
+  });
+});
