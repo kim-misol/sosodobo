@@ -4,7 +4,7 @@
 //   PATCH  ?id=10 { travelerId, caption?, day?, takenAt?, lat?, lng?, placeName?, locationSource?, reset? }
 //                                          → 일차·촬영시각·위치 수정 / reset:['time','location'] 원래대로 (여행자 누구나)
 //                                            캡션은 올린 사람만
-//   DELETE ?id=10&travelerId=1             → 삭제 (올린 사람만) + Blob 파일 정리
+//   DELETE ?id=10&travelerId=1             → 삭제 (올린 사람 · 관리자) + Blob 파일 정리
 //
 // 파일 자체는 브라우저가 Vercel Blob 에 직접 올리고(/api/photo-upload 가 토큰 발급),
 // 이 API 는 주소와 촬영 정보만 DB 에 저장합니다.
@@ -65,9 +65,9 @@ async function createPhoto(v, tripId) {
 
 /**
  * 사진 한 장을 찾아 요청자에게 권한이 있는지 확인. 문제가 있으면 { status, error }.
- * ownerOnly=false 면 등록된 여행자 누구나 통과하고, isOwner 로 본인 여부를 알려 줍니다.
+ * 고치기 · 지우기는 올린 사람 본인, 또는 여행 관리자 (PhotoCore.canManagePhoto).
  */
-async function findOwnedPhoto(req, travelerIdRaw, ownerOnly = true) {
+async function findOwnedPhoto(req, travelerIdRaw) {
   const id = toInt(req.query.id);
   const travelerId = toInt(travelerIdRaw !== undefined ? travelerIdRaw : req.query.travelerId);
   if (!Number.isInteger(id) || !Number.isInteger(travelerId)) {
@@ -76,12 +76,11 @@ async function findOwnedPhoto(req, travelerIdRaw, ownerOnly = true) {
   const result = await sql`SELECT * FROM photos WHERE id = ${id} AND trip_id = ${req.tripId}`;
   if (result.rowCount === 0) return { status: 404, error: '해당 사진을 찾을 수 없어요.' };
   const row = result.rows[0];
-  const isOwner = PhotoCore.canModify({ uploaderId: row.uploader_id }, travelerId);
-  if (!isOwner) {
-    if (ownerOnly) return { status: 403, error: '본인이 올린 사진만 바꿀 수 있어요.' };
-    if (!(await travelerExists(travelerId, req.tripId))) return { status: 403, error: '등록된 여행자만 고칠 수 있어요.' };
+  const role = req.member ? req.member.role : null;
+  if (!PhotoCore.canManagePhoto({ uploaderId: row.uploader_id }, travelerId, role)) {
+    return { status: 403, error: '내가 올린 사진만 고치거나 지울 수 있어요. (여행 관리자는 모든 사진)', code: 'not_owner' };
   }
-  return { row, travelerId, isOwner };
+  return { row, travelerId };
 }
 
 async function handler(req, res) {
@@ -112,10 +111,10 @@ async function handler(req, res) {
 
     if (req.method === 'PATCH') {
       const body = readBody(req);
-      const found = await findOwnedPhoto(req, body.travelerId, false);
+      const found = await findOwnedPhoto(req, body.travelerId);
       if (found.error) return res.status(found.status).json({ error: found.error });
       const parsed = parsePhotoPatch(body, mapPhotoRow(found.row), undefined, {
-        isOwner: found.isOwner, tripStartDate: req.trip.startDate, tripDays: req.trip.days,
+        isOwner: true, tripStartDate: req.trip.startDate, tripDays: req.trip.days,
       });
       if (parsed.error) return res.status(parsed.status || 400).json({ error: parsed.error });
       const v = parsed.value;

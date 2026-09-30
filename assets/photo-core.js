@@ -185,6 +185,11 @@
    * 본인 항목인지. 작성자가 삭제돼(null) 주인이 없는 항목은 누구나 정리할 수 있게 둡니다.
    * ownerKey: 사진은 'uploaderId', 댓글은 'authorId'.
    */
+  /** 사진 고치기 · 지우기: 여행 관리자는 모든 사진, 아니면 내가 올린 사진만 */
+  function canManagePhoto(photo, travelerId, role) {
+    return role === 'admin' || canModify(photo, travelerId);
+  }
+
   function canModify(item, travelerId, ownerKey) {
     if (!item || !Number.isInteger(travelerId)) return false;
     var owner = item[ownerKey || 'uploaderId'];
@@ -641,6 +646,7 @@
     sortByTakenAt: sortByTakenAt,
     filterByDay: filterByDay,
     canModify: canModify,
+    canManagePhoto: canManagePhoto,
     validateCaption: validateCaption,
     extractExif: extractExif,
     blobPath: blobPath,

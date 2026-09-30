@@ -524,3 +524,10 @@ test('likedBy: 내가 좋아요한 사진만, 나를 모르면 빈 목록', () =
   assert.deepEqual(P.likedBy(albumPhotos, 4).map((p) => p.id), [3, 4]);
   assert.deepEqual(P.likedBy(albumPhotos, null), []);
 });
+
+test('canManagePhoto: 관리자는 모든 사진, 아니면 내가 올린 사진만', () => {
+  assert.equal(P.canManagePhoto({ uploaderId: 1 }, 1, 'member'), true);
+  assert.equal(P.canManagePhoto({ uploaderId: 1 }, 2, 'member'), false);
+  assert.equal(P.canManagePhoto({ uploaderId: 1 }, 2, 'admin'), true);
+  assert.equal(P.canManagePhoto({ uploaderId: 1 }, 2, null), false);
+});

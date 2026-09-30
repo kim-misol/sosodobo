@@ -27,6 +27,7 @@
   // ---------------------------------------------------------------------------
   var state = {
     me: null,            // 내 traveler id
+    role: null,          // 이 여행에서 내 역할 (admin 이면 모든 사진 고치기 · 지우기)
     travelers: [],
     photos: [],
     filter: 'all',       // 'all' | 1 | 2 | 3 | 'etc'
@@ -156,6 +157,7 @@
       var data = await api('/photos');
       state.photos = data.photos || [];
       state.travelers = data.travelers || [];
+      state.role = data.me ? data.me.role : null;
       if (state.me !== null && !state.travelers.some(function (t) { return t.id === state.me; })) {
         saveMe(null); // 삭제된 여행자면 다시 고르게
       }
@@ -952,7 +954,7 @@
     if (!box) return;
     var p = photoById(state.lightboxId);
     if (!state.sheet || !p) { box.innerHTML = ''; return; }
-    var mine = P.canModify(p, state.me);
+    var mine = P.canManagePhoto(p, state.me, state.role);
     var body;
     if (state.sheet === 'comments') {
       body = commentsSectionHtml(p);
@@ -1015,7 +1017,7 @@
     if (!p) { closeLightbox(); return; }
     var list = visiblePhotos();
     var idx = list.findIndex(function (x) { return x.id === p.id; });
-    var mine = P.canModify(p, state.me);
+    var mine = P.canManagePhoto(p, state.me, state.role);
     var where = p.placeName ? ' · 📍 ' + esc(p.placeName) : '';
     var dayLabel = p.day ? ' · ' + p.day + '일차' : '';
 
@@ -1246,13 +1248,13 @@
 
   var editedTag = '<span class="ph-tag">✎ 수정됨</span>';
 
-  /** 시간·위치·일차는 "나는 누구"를 고른 여행자 누구나 고칠 수 있어요 (캡션·삭제는 올린 사람만). */
-  function canEditMeta() {
-    return Number.isInteger(state.me);
+  /** 고치기 · 지우기는 내가 올린 사진만, 여행 관리자는 모든 사진 (서버에서도 같은 규칙) */
+  function canEditMeta(p) {
+    return Number.isInteger(state.me) && P.canManagePhoto(p, state.me, state.role);
   }
 
   function infoPanelHtml(p, mine) {
-    if (canEditMeta() && state.editingMeta) return editFormHtml(p, mine);
+    if (canEditMeta(p) && state.editingMeta) return editFormHtml(p, mine);
     var edited = P.isEdited(p);
     var rows = [];
 
@@ -1289,8 +1291,8 @@
       rows.push(infoRow('🖼', '크기', p.width + '×' + p.height + ' <span class="ph-muted">(앨범 저장본)</span>'));
     }
 
-    var editBtn = canEditMeta() && lightboxActions['edit-meta']
-      ? '<button type="button" class="ph-act" data-action="edit-meta">✎ 시간·위치 수정</button>' : '';
+    var editBtn = canEditMeta(p) && lightboxActions['edit-meta']
+      ? '<button type="button" class="ph-act" data-action="edit-meta">✎ 수정</button>' : '';
     return '<div class="ph-info" data-slot="info">' + rows.join('') +
       (editBtn ? '<div class="ph-lb-actions">' + editBtn + '</div>' : '') + '</div>';
   }
@@ -1390,7 +1392,7 @@
     var canResetTime = edited.time && !!o.takenAt;
     var canResetLoc = edited.location;
     return '<form class="ph-edit" data-slot="edit" autocomplete="off">' +
-      (mine ? '' : '<p class="ph-muted ph-edit-note">' + esc(nameOf(p.uploaderId)) + '님이 올린 사진이에요. 시간·일차·장소를 함께 고칠 수 있어요.</p>') +
+      (P.canModify(p, state.me) ? '' : '<p class="ph-muted ph-edit-note">' + esc(nameOf(p.uploaderId)) + '님이 올린 사진이에요. 여행 관리자라서 고칠 수 있어요.</p>') +
       '<label class="ph-edit-label"><span>촬영 시각 <span class="ph-muted">(한국 시간)</span></span>' +
       '<input type="datetime-local" name="takenAt" value="' + esc(P.toKstInputValue(p.takenAt)) + '"></label>' +
       (canResetTime ? '<button type="button" class="ph-linkbtn" data-action="reset-time">↺ 원래 시각으로 (' +
@@ -1401,7 +1403,7 @@
       '" placeholder="장소 이름 (예: 지족해협 죽방렴)" hidden>' +
       (canResetLoc ? '<button type="button" class="ph-linkbtn" data-action="reset-location">↺ 원래 위치로' +
         (o.lat !== null && o.lat !== undefined ? '' : ' (위치 없음)') + '</button>' : '') +
-      (mine ? '<label class="ph-edit-label">캡션<input type="text" name="caption" maxlength="' + P.LIMITS.captionMax +
+      ('<label class="ph-edit-label">캡션<input type="text" name="caption" maxlength="' + P.LIMITS.captionMax +
       '" value="' + esc(p.caption || '') + '" placeholder="한 줄 캡션 (선택)"></label>' : '') +
       '<div class="ph-lb-actions">' +
       '<button type="submit" class="ph-act on"' + (state.saving ? ' disabled' : '') + '>' + (state.saving ? '저장 중…' : '저장') + '</button>' +

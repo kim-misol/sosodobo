@@ -87,6 +87,15 @@
     await load();
   }
 
+  /** 이름 바꾸기: 관리자는 누구든, 아니면 내 이름만 (서버에서도 막음) */
+  async function renameTraveler(id, name) {
+    await api('/travelers?id=' + id, jsonOpts('PATCH', { name: name }));
+    await load();
+  }
+  function canRename(id) {
+    return !state.me || state.me.role === 'admin' || state.me.travelerId === id;
+  }
+
   async function deleteTraveler(id) {
     var t = state.travelers.find(function (x) { return x.id === id; });
     if (!confirm('‘' + (t ? t.name : '') + '’ 여행자를 삭제할까요?\n(지출 기록에 들어 있는 사람은 뺄 수 없어요)')) return;
@@ -483,6 +492,8 @@
     addTraveler: addTraveler,
     deleteTraveler: deleteTraveler,
     canManagePeople: canManagePeople,
+    renameTraveler: renameTraveler,
+    canRename: canRename,
     onChange: function (fn) { listeners.push(fn); },
   };
 

@@ -207,27 +207,17 @@ function patchSqlWithTravelers(row, travelerIds) {
   });
 }
 
-test('PATCH /api/photos: 다른 여행자도 시간·위치·일차를 고칠 수 있다', async () => {
-  const sql = patchSqlWithTravelers(photoRow(), [1, 2]);
-  const handler = loadHandler('photos.js', sql, { '@vercel/blob': blobMock().module });
-  const res = await call(handler, {
-    method: 'PATCH', query: { id: '10' },
-    body: { travelerId: 2, takenAt: '2026-09-25T06:00:00Z', day: 2, placeName: '창선교', locationSource: 'manual' },
-  });
-  assert.equal(res.statusCode, 200);
-  const update = sql.calls.find((c) => c.text.startsWith('UPDATE photos'));
-  assert.ok(update.values.includes('2026-09-25T06:00:00.000Z'));
-  assert.ok(update.values.includes('창선교'));
-});
-
-test('PATCH /api/photos: 캡션은 올린 사람만, 등록되지 않은 여행자는 못 고친다', async () => {
+test('PATCH · DELETE /api/photos: 다른 여행자는 남의 사진을 고치거나 지울 수 없다 (로그인이 꺼져 있으면 관리자 없음)', async () => {
   const h1 = loadHandler('photos.js', patchSqlWithTravelers(photoRow(), [1, 2]), { '@vercel/blob': blobMock().module });
-  const r1 = await call(h1, { method: 'PATCH', query: { id: '10' }, body: { travelerId: 2, caption: 'x' } });
+  const r1 = await call(h1, { method: 'PATCH', query: { id: '10' }, body: { travelerId: 2, day: 2 } });
   assert.equal(r1.statusCode, 403);
-  assert.match(r1.body.error, /캡션/);
-  const h2 = loadHandler('photos.js', patchSqlWithTravelers(photoRow(), [1]), { '@vercel/blob': blobMock().module });
-  const r2 = await call(h2, { method: 'PATCH', query: { id: '10' }, body: { travelerId: 99, day: 2 } });
+  assert.equal(r1.body.error.includes('관리자'), true);
+  const h2 = loadHandler('photos.js', patchSqlWithTravelers(photoRow(), [1, 2]), { '@vercel/blob': blobMock().module });
+  const r2 = await call(h2, { method: 'DELETE', query: { id: '10', travelerId: '2' } });
   assert.equal(r2.statusCode, 403);
+  const h3 = loadHandler('photos.js', patchSqlWithTravelers(photoRow(), [1, 2]), { '@vercel/blob': blobMock().module });
+  const r3 = await call(h3, { method: 'PATCH', query: { id: '10' }, body: { travelerId: 1, caption: '내 캡션' } });
+  assert.equal(r3.statusCode, 200, '올린 사람은 캡션까지');
 });
 
 test('PATCH /api/photos validates input', async () => {

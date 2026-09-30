@@ -41,3 +41,16 @@ test('POST /api/travelers: 새 사람은 지금 여행에 들어간다', async (
   assert.equal(res.statusCode, 201);
   assert.deepEqual(sql.calls.find((c) => c.text.startsWith('INSERT INTO travelers')).values, ['수진', 1]);
 });
+
+test('PATCH /api/travelers: 이름을 바꾸고, 이 여행 안에서만 · 빈 이름은 400', async () => {
+  const sql = createFakeSql((text) => (text.startsWith('UPDATE travelers SET name') ? { rows: [{ id: 3, name: '아빠' }] } : undefined));
+  const res = await call(loadHandler('travelers.js', sql), { method: 'PATCH', query: { id: '3' }, body: { name: '  아빠 ' } });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { id: 3, name: '아빠' });
+  const upd = sql.calls.find((c) => c.text.startsWith('UPDATE travelers SET name'));
+  assert.deepEqual(upd.values, ['아빠', 3, 1], '기본 여행(1) 안의 3번만');
+  const empty = await call(loadHandler('travelers.js', createFakeSql(() => undefined)), { method: 'PATCH', query: { id: '3' }, body: { name: ' ' } });
+  assert.equal(empty.statusCode, 400);
+  const other = await call(loadHandler('travelers.js', createFakeSql(() => ({ rows: [] }))), { method: 'PATCH', query: { id: '9', trip: '2' }, body: { name: 'x' } });
+  assert.equal(other.statusCode, 404);
+});

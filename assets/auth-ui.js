@@ -309,6 +309,9 @@
       '<button type="button" class="nav-logout" data-auth-logout>로그아웃</button>';
   }
 
+  // 이름을 바꾸면 (mobile-shell.js 가 알림) PC 위쪽 이름도 다시
+  document.addEventListener('sosodobo:auth', renderNavAccount);
+
   /** 프로필 탭 등에서 쓰는 계정 정보 HTML (mobile-shell.js 가 불러 씀). */
   AuthUI.accountHtml = function () {
     var m = AuthUI.member;

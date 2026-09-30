@@ -103,6 +103,21 @@
    * 함께 가는 사람 목록 (사진 수 · 결제 금액 · 관리자 · 추가/빼기).
    * 폰의 "사람" 탭과 PC 의 "여행자" 칸이 같은 내용을 씀 — idPrefix 로 입력칸 id 를 나눔.
    */
+  // 이름 바꾸는 중인 여행자 id (사람 탭 · PC 목록 · 프로필이 같이 씀)
+  var renaming = null;
+  function canRename(id) {
+    return !window.SettleUI || !window.SettleUI.canRename || window.SettleUI.canRename(id);
+  }
+  function renameFormHtml(t) {
+    return '<form class="m-rename" data-m-rename-form="' + t.id + '" autocomplete="off">' +
+      '<input name="name" maxlength="40" value="' + esc(t.name) + '" aria-label="' + esc(t.name) + '의 새 이름" required>' +
+      '<button type="submit" class="m-rename-save">저장</button>' +
+      '<button type="button" class="m-textbtn" data-m-rename-cancel>취소</button></form>';
+  }
+  function renameBtnHtml(t, label) {
+    return '<button type="button" class="m-textbtn" data-m-rename="' + t.id + '" aria-label="' + esc(t.name) + ' 이름 바꾸기">' + (label || '수정') + '</button>';
+  }
+
   function peopleHtml(idPrefix, compact) {
     var list = travelers();
     var me = photoState().me;
@@ -121,9 +136,11 @@
     var canInvite = loginOn && !!(trip && trip.joinCode) && !!window.TripUI;
     var rows = list.length ? list.map(function (t) {
       var bits = [(photos[t.id] ? '사진 ' + photos[t.id] + '장' : '사진 없음'), (paid[t.id] ? '결제 ' + won(paid[t.id]) : '결제 없음')];
+      if (renaming === t.id) return '<div class="m-person">' + avatar(t.id, t.name) + renameFormHtml(t) + '</div>';
       return '<div class="m-person">' + avatar(t.id, t.name) +
         '<div class="t"><b>' + esc(t.name) + (t.id === me ? ' <span class="m-chip">나</span>' : '') +
         (t.role === 'admin' ? ' <span class="m-chip line">관리자</span>' : '') + '</b><span>' + bits.join(' · ') + '</span></div>' +
+        (canRename(t.id) ? renameBtnHtml(t) : '') +
         (canInvite && t.hasAccount === false
           ? '<button type="button" class="m-textbtn" data-m-invite-as="' + t.id + '" aria-label="' + esc(t.name) + '에게 보낼 초대 링크 복사">초대</button>' : '') +
         (manage && !(t.role === 'admin' && t.hasAccount)
@@ -154,10 +171,10 @@
   }
 
   /** PC: 정산 칸의 여행자 목록도 같은 내용으로 (입력 중이면 그대로 둠) */
-  function renderPcPeople() {
+  function renderPcPeople(force) {
     if (!els.pcPeople) return;
     var active = document.activeElement;
-    if (active && els.pcPeople.contains(active) && active.value) return;
+    if (!force && active && els.pcPeople.contains(active) && active.value) return;
     els.pcPeople.innerHTML = peopleHtml('pc', true);
   }
 
@@ -174,6 +191,43 @@
       alert(err.message);
     } finally {
       btn.disabled = false;
+    }
+  }
+
+  async function renamePerson(form) {
+    var id = Number(form.getAttribute('data-m-rename-form'));
+    var name = form.name.value.trim();
+    if (!name) return;
+    form.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+    try {
+      await window.SettleUI.renameTraveler(id, name);
+      var auth = window.AuthUI && window.AuthUI.member;
+      if (auth && auth.traveler && auth.traveler.id === id) {
+        auth.traveler.name = name;
+        document.dispatchEvent(new CustomEvent('sosodobo:auth', { detail: auth })); // PC 위쪽 이름 등
+      }
+      renaming = null;
+      if (window.PhotoUI) window.PhotoUI.load({ quiet: true });
+      if (window.ItineraryUI && window.ItineraryUI.rerender) window.ItineraryUI.rerender();
+      rerenderAll();
+    } catch (err) {
+      alert(err.message);
+      form.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+    }
+  }
+  function rerenderAll() {
+    renderPeople();
+    renderProfile();
+    renderPcPeople(true);
+  }
+  function startRename(id) {
+    renaming = id;
+    rerenderAll();
+    var input = document.querySelector('[data-m-rename-form="' + id + '"] input');
+    if (input && input.offsetParent) { input.focus(); input.select(); }
+    else {
+      var any = [].slice.call(document.querySelectorAll('[data-m-rename-form="' + id + '"] input')).find(function (x) { return x.offsetParent; });
+      if (any) { any.focus(); any.select(); }
     }
   }
 
@@ -203,8 +257,10 @@
     var auth = window.AuthUI && window.AuthUI.member;
     var meBlock = auth
       ? '<section class="m-block m-me">' + avatar(auth.traveler.id, auth.traveler.name, 'lg') +
-        '<div class="t"><b>' + esc(auth.traveler.name) + '</b><span class="m-muted">' +
-        esc(auth.user.email || auth.user.name || '') + '</span></div></section>' + window.AuthUI.accountHtml()
+        (renaming === auth.traveler.id ? renameFormHtml(auth.traveler)
+          : '<div class="t"><b>' + esc(auth.traveler.name) + '</b><span class="m-muted">' +
+            esc(auth.user.email || auth.user.name || '') + '</span></div>' + renameBtnHtml(auth.traveler, '이름 수정')) +
+        '</section>' + window.AuthUI.accountHtml()
       : '<section class="m-block m-me">' + (mine ? avatar(mine.id, mine.name, 'lg') : '<span class="m-avatar lg empty">?</span>') +
         '<div class="t"><b>' + (mine ? esc(mine.name) : '아직 누군지 몰라요') + '</b>' +
         '<label class="m-field" for="m-me">나는 누구?' + select + '</label></div></section>' +
@@ -234,6 +290,19 @@
       }
       var b = e.target.closest('[data-m-tab]');
       if (b) setTab(b.getAttribute('data-m-tab'));
+    });
+    [els.people, els.pcPeople, els.profile].filter(Boolean).forEach(function (box) {
+      box.addEventListener('submit', function (e) {
+        if (e.target.matches('[data-m-rename-form]')) { e.preventDefault(); renamePerson(e.target); }
+      });
+      box.addEventListener('click', function (e) {
+        var r = e.target.closest('[data-m-rename]');
+        if (r) { startRename(Number(r.getAttribute('data-m-rename'))); return; }
+        if (e.target.closest('[data-m-rename-cancel]')) { renaming = null; rerenderAll(); }
+      });
+      box.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && e.target.closest('[data-m-rename-form]')) { renaming = null; rerenderAll(); }
+      });
     });
     [els.people, els.pcPeople].filter(Boolean).forEach(function (box) {
       box.addEventListener('submit', function (e) {
