@@ -164,7 +164,8 @@
       (p.google ? '<a class="auth-sso google" href="' + API + '?action=login&amp;provider=google">' + GOOGLE_G + 'Google로 계속하기</a>' : '') +
       (p.kakao ? '<a class="auth-sso kakao" href="' + API + '?action=login&amp;provider=kakao">' + KAKAO_BUBBLE + '카카오로 계속하기</a>' : '') +
       '</div><p class="auth-fine">' + (note ? '처음이면 계정이 바로 만들어지고, 초대 링크로 들어와서 참여 코드는 입력하지 않아도 돼요.'
-        : '처음이면 계정이 바로 만들어지고, 여행 참여 코드를 한 번 입력해요.') + '</p></div>';
+        : '처음이면 계정이 바로 만들어지고, 여행 참여 코드를 한 번 입력해요.') + '</p>' +
+      '<p class="auth-fine"><a href="privacy.html">개인정보 처리방침</a> · <a href="support.html">고객 지원</a></p></div>';
     reveal();
   }
 
@@ -292,6 +293,104 @@
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // iOS 앱 (Capacitor): 구글은 앱 안 웹뷰 로그인을 막아서, 시스템 로그인 창(WebAuth 플러그인)으로 다녀와요.
+  // 돌아오면 sosodobo://auth?code=.. → 이 웹뷰에서 한 번만 쓰는 코드로 로그인 쿠키를 받아요.
+  // ---------------------------------------------------------------------------
+  function inApp() {
+    var C = window.Capacitor;
+    return !!(C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.WebAuth);
+  }
+  AuthUI.inApp = inApp;
+
+  async function appLogin(provider, link) {
+    var ticket = '';
+    if (link) ticket = (await post('app-link-ticket')).ticket;
+    var url = location.origin + '/' + API + '?action=login&provider=' + encodeURIComponent(provider) + '&app=1' +
+      (ticket ? '&ticket=' + encodeURIComponent(ticket) : '');
+    var back;
+    try {
+      back = await window.Capacitor.Plugins.WebAuth.start({ url: url, callbackScheme: 'sosodobo' });
+    } catch (e) {
+      return; // 사용자가 로그인 창을 닫음
+    }
+    var q = new URL(back.url).searchParams;
+    if (q.get('code')) {
+      location.href = '/' + API + '?action=app-exchange&code=' + encodeURIComponent(q.get('code'));
+    } else if (q.get('error') && q.get('error') !== 'cancelled') {
+      alert(LOGIN_ERRORS[q.get('error')] || LOGIN_ERRORS.failed);
+    }
+  }
+
+  // 앱이 sosodobo://auth?code=… 로 열렸을 때 (로그인 창 밖에서 돌아온 경우)도 같은 방법으로
+  (function () {
+    var C = window.Capacitor;
+    if (!(C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.App)) return;
+    C.Plugins.App.addListener('appUrlOpen', function (ev) {
+      var u;
+      try { u = new URL(ev.url); } catch (x) { return; }
+      if (u.protocol !== 'sosodobo:' || u.host !== 'auth') return;
+      if (u.searchParams.get('code')) location.href = '/' + API + '?action=app-exchange&code=' + encodeURIComponent(u.searchParams.get('code'));
+    });
+  })();
+
+  document.addEventListener('click', function (e) {
+    if (!inApp()) return;
+    var a = e.target.closest('a[href*="action=login"]');
+    if (!a) return;
+    e.preventDefault();
+    var u = new URL(a.getAttribute('href'), location.href);
+    appLogin(u.searchParams.get('provider'), u.searchParams.get('link') === '1').catch(function (err) { alert(err.message); });
+  }, true);
+
+  // ---------------------------------------------------------------------------
+  // 계정 삭제 (프로필 · PC 내 계정 창)
+  // ---------------------------------------------------------------------------
+  var deleteSheet = null;
+  function openDeleteAccount() {
+    closeAccount();
+    if (deleteSheet) deleteSheet.remove();
+    deleteSheet = document.createElement('div');
+    deleteSheet.className = 'tsheet-scrim';
+    deleteSheet.innerHTML = '<div class="tsheet" role="dialog" aria-modal="true" aria-label="계정 삭제">' +
+      '<span class="tsheet-grab" aria-hidden="true"></span><button type="button" class="tsheet-x" data-auth-del-close aria-label="닫기">×</button>' +
+      '<h2>계정 삭제</h2>' +
+      '<form class="tui-form" data-auth-del-form autocomplete="off">' +
+      '<p class="tui-sub" style="margin:0">로그인 계정(이메일 · 이름 · 구글/카카오 연결)이 지워지고 다시 되돌릴 수 없어요. ' +
+      '내가 관리자인 여행은 계정이 있는 다른 참여자에게 관리자가 넘어가요. ' +
+      '함께 쓰는 지출 · 정산 기록과 댓글은 다른 사람들의 정산을 위해 여행 안의 이름으로만 남아요.</p>' +
+      '<label class="tui-check"><input type="checkbox" name="deletePhotos" checked> <span>내가 올린 사진 · 영상도 모두 지우기</span></label>' +
+      '<label><span>확인을 위해 <b>삭제</b>라고 입력해 주세요</span><input name="confirm" placeholder="삭제" required></label>' +
+      '<p class="tui-err" data-auth-del-err hidden></p>' +
+      '<button type="submit" class="tui-btn danger">계정 삭제</button></form></div>';
+    document.body.appendChild(deleteSheet);
+    document.body.classList.add('tsheet-open');
+  }
+  function closeDeleteAccount() {
+    if (deleteSheet) { deleteSheet.remove(); deleteSheet = null; }
+    document.body.classList.remove('tsheet-open');
+  }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-auth-delete]')) { openDeleteAccount(); return; }
+    if (deleteSheet && (e.target === deleteSheet || e.target.closest('[data-auth-del-close]'))) closeDeleteAccount();
+  });
+  document.addEventListener('submit', function (e) {
+    var f = e.target.closest('[data-auth-del-form]');
+    if (!f) return;
+    e.preventDefault();
+    var err = f.querySelector('[data-auth-del-err]');
+    var btn = f.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    post('delete-account', { confirm: f.confirm.value, deletePhotos: f.deletePhotos.checked }).then(function () {
+      try { localStorage.clear(); } catch (x) { /* 괜찮음 */ }
+      location.href = location.pathname;
+    }).catch(function (x) {
+      err.hidden = false;
+      err.textContent = x.message;
+      btn.disabled = false;
+    });
+  });
+
   function logout() {
     post('logout').catch(function () { /* 그래도 새로고침 */ }).then(function () { location.href = location.pathname; });
   }
@@ -328,7 +427,8 @@
   };
 
   AuthUI.logoutHtml = function () {
-    return AuthUI.member ? '<section class="m-block"><button type="button" class="m-logout" data-auth-logout>로그아웃</button></section>' : '';
+    return AuthUI.member ? '<section class="m-block m-signout"><button type="button" class="m-logout" data-auth-logout>로그아웃</button>' +
+      '<button type="button" class="m-delete" data-auth-delete>계정 삭제</button></section>' : '';
   };
 
   /** PC: 내 계정 창 (폰 "프로필" 탭과 같은 내용 — 로그인 계정 · 다른 계정 연결 · 로그아웃) */

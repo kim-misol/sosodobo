@@ -218,3 +218,79 @@ test('여행 참여: 코드가 가리키는 여행에서, 비어 있는 사람�
     assert.deepEqual(sql2.calls.find((c) => c.text.startsWith('INSERT INTO travelers')).values, ['수진', 42, 7, 'admin'], '관리자가 없던 여행이면 관리자로');
   });
 });
+
+// ---- iOS 앱 로그인 · 계정 삭제 ---------------------------------------------------
+
+test('앱 로그인: 콜백은 sosodobo://auth?code= 로, 코드는 한 번만 로그인 쿠키로 바뀐다', async () => {
+  await withEnv(Object.assign({}, ENV, { PUBLIC_BASE_URL: 'https://sosodobo.vercel.app' }), async () => {
+    const start = await call(loadHandler('auth.js', createFakeSql()), { query: { action: 'login', provider: 'google', app: '1' } });
+    const state = new URL(start.headers.Location).searchParams.get('state');
+    const realFetch = global.fetch;
+    global.fetch = async (url) => (String(url).includes('token')
+      ? new Response(JSON.stringify({ access_token: 'tok' }), { status: 200 })
+      : new Response(JSON.stringify({ sub: 'g-9', email: 'b@example.com', name: '앱', picture: null }), { status: 200 }));
+    let code;
+    try {
+      const sql = createFakeSql((text) => (text.startsWith('SELECT user_id FROM user_identities') ? { rows: [{ user_id: 77 }] } : { rows: [] }));
+      const done = await call(loadHandler('auth.js', sql), {
+        query: { action: 'callback', provider: 'google', code: 'abc', state }, headers: { cookie: cookiesFrom(start) },
+      });
+      assert.match(done.headers.Location, /^sosodobo:\/\/auth\?code=/);
+      assert.ok(!cookiesFrom(done).includes(A.SESSION_COOKIE + '=e'), '시스템 로그인 창에는 세션을 주지 않음');
+      code = decodeURIComponent(done.headers.Location.split('code=')[1]);
+    } finally {
+      global.fetch = realFetch;
+    }
+    const usedKeys = new Set();
+    const sql2 = createFakeSql((text, values) => {
+      if (text.startsWith('INSERT INTO app_meta')) {
+        if (usedKeys.has(values[0])) return { rows: [] };
+        usedKeys.add(values[0]);
+        return { rows: [{ key: values[0] }] };
+      }
+      return { rows: [] };
+    });
+    const ex = await call(loadHandler('auth.js', sql2), { query: { action: 'app-exchange', code } });
+    assert.equal(ex.headers.Location, '/');
+    const session = cookiesFrom(ex).split('; ').find((c) => c.startsWith(A.SESSION_COOKIE + '='));
+    assert.equal(A.sessionUserId({ headers: { cookie: session } }, ENV), 77);
+    const again = await call(loadHandler('auth.js', sql2), { query: { action: 'app-exchange', code } });
+    assert.equal(again.headers.Location, '/?login=expired', '같은 코드는 두 번 못 씀');
+    const fake = await call(loadHandler('auth.js', sql2), { query: { action: 'app-exchange', code: A.sign({ uid: 1, purpose: 'link', n: 'x', exp: Date.now() + 9999 }, SECRET) } });
+    assert.equal(fake.headers.Location, '/?login=expired', '다른 용도의 표는 안 됨');
+  });
+});
+
+test('앱 로그인: 이어 붙이기 표(ticket)로 지금 계정에 연결', async () => {
+  await withEnv(ENV, async () => {
+    const t = await call(loadHandler('auth.js', createFakeSql()), { method: 'POST', query: { action: 'app-link-ticket' }, headers: { cookie: sessionCookie(5) } });
+    assert.equal(t.statusCode, 200);
+    const start = await call(loadHandler('auth.js', createFakeSql()), { query: { action: 'login', provider: 'kakao', app: '1', ticket: t.body.ticket } });
+    const st = A.readOAuthState({ headers: { cookie: cookiesFrom(start) } }, ENV);
+    assert.equal(st.link, 5);
+    assert.equal(st.app, true);
+    const noLogin = await call(loadHandler('auth.js', createFakeSql()), { method: 'POST', query: { action: 'app-link-ticket' } });
+    assert.equal(noLogin.statusCode, 401);
+  });
+});
+
+test('계정 삭제: "삭제" 확인, 관리자는 다른 참여자에게 넘기고 계정을 지운다', async () => {
+  await withEnv(ENV, async () => {
+    const no = await call(loadHandler('auth.js', createFakeSql()), { method: 'POST', query: { action: 'delete-account' }, headers: { cookie: sessionCookie(5) }, body: {} });
+    assert.equal(no.statusCode, 400);
+    const sql = createFakeSql((text) => {
+      if (text.startsWith('SELECT id, trip_id, role FROM travelers')) return { rows: [{ id: 11, trip_id: 3, role: 'admin' }, { id: 12, trip_id: 4, role: 'member' }] };
+      if (text.startsWith('DELETE FROM photos')) return { rows: [{ url: 'https://a.public.blob.vercel-storage.com/photos/x.jpg', thumb_url: null }] };
+      return { rows: [] };
+    });
+    const res = await call(loadHandler('auth.js', sql, { '@vercel/blob': { del: async () => {} } }), {
+      method: 'POST', query: { action: 'delete-account' }, headers: { cookie: sessionCookie(5) }, body: { confirm: '삭제', deletePhotos: true },
+    });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.removedPhotos, 1);
+    const promote = sql.calls.find((c) => c.text.startsWith("UPDATE travelers SET role = 'admin'"));
+    assert.deepEqual(promote.values, [3, 5], '여행 3 에서 나(5) 말고 다른 계정에게');
+    assert.ok(sql.calls.some((c) => c.text.startsWith('DELETE FROM users') && c.values[0] === 5));
+    assert.ok(cookiesFrom(res).includes(A.SESSION_COOKIE + '='), '로그아웃 쿠키');
+  });
+});

@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#FBFAF4">
 <link rel="icon" type="image/png" href="assets/favicon.png">
@@ -972,6 +972,14 @@
   .m-account-state{margin-left:auto;font-size:12.5px;font-weight:700;color:var(--sea);text-decoration:none;}
   .m-account-state.on{color:#2f7a4f;}
   .m-logout{border:0;background:none;color:#b5572b;font-size:14.5px;font-weight:700;cursor:pointer;font-family:inherit;padding:2px 0;}
+  .auth-fine a{color:var(--sub);}
+  .m-legal{margin:0;text-align:center;font-size:12.5px;color:var(--sub);}
+  .m-legal a{color:var(--sub);}
+  .m-signout{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .m-delete{border:0;background:none;color:var(--sub);font-size:13px;text-decoration:underline;cursor:pointer;font-family:inherit;padding:2px 0;}
+  .tui-check{flex-direction:row !important;align-items:center;gap:8px;font-size:14.5px;}
+  .tui-check input{width:18px;height:18px;accent-color:var(--navy);}
+  .tui-btn.danger{background:#B4532A;border-color:#B4532A;color:#fff;}
 
 
   /* =====================================================================
@@ -1288,6 +1296,9 @@
   .m-block{border-color:#D9DED6;border-radius:20px;}
   footer{display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--font-display);font-size:14px;}
   footer img{width:28px;height:28px;}
+  footer{flex-wrap:wrap;}
+  .footer-links{flex-basis:100%;text-align:center;font-family:"IBM Plex Sans KR",sans-serif;font-size:12.5px;}
+  .footer-links a{color:var(--sub);}
 
   /* 로그인 화면 */
   .auth-mark{width:76px;height:76px;border-radius:50%;background:var(--mint) url(assets/logo.png) center / 128% no-repeat;font-size:0;}
@@ -1531,6 +1542,7 @@
 
 <footer>
   <img src="assets/logo.png" alt="" width="28" height="28"> 소소도보 · 같이 걷고, 같이 남기는 여행
+  <span class="footer-links"><a href="privacy.html">개인정보 처리방침</a> · <a href="support.html">고객 지원</a></span>
 </footer>
 
 <div class="ph-lightbox" id="ph-lightbox" role="dialog" aria-modal="true" aria-label="사진 크게 보기" tabindex="-1" hidden></div>

@@ -10,6 +10,12 @@
     "@vercel/postgres": "^0.10.0"
   },
   "devDependencies": {
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.3",
     "pg": "^8.23.0"
   }
 }

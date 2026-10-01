@@ -1,0 +1,27 @@
+{
+  "appId": "com.sosodobo.app",
+  "appName": "소소도보",
+  "webDir": "app-shell",
+  "server": {
+    "url": "https://sosodobo.vercel.app",
+    "errorPath": "index.html",
+    "allowNavigation": ["sosodobo.vercel.app"]
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#FBFAF4",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 600,
+      "launchAutoHide": true,
+      "backgroundColor": "#FBFAF4",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "LIGHT",
+      "overlaysWebView": true
+    }
+  }
+}

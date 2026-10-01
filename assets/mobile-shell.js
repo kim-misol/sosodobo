@@ -272,7 +272,8 @@
         : '<p class="m-empty">불러오는 중…</p>') +
       '<div class="tui-actions" style="margin-top:10px"><button type="button" class="tui-btn primary" data-tui="create">＋ 새 여행 만들기</button>' +
       (window.AuthUI && window.AuthUI.enabled ? '<button type="button" class="tui-btn" data-tui="join">참여 코드로 참여</button>' : '') + '</div></section>' +
-      (auth ? window.AuthUI.logoutHtml() : '');
+      (auth ? window.AuthUI.logoutHtml() : '') +
+      '<p class="m-legal"><a href="privacy.html">개인정보 처리방침</a> · <a href="support.html">고객 지원</a></p>';
   }
 
   // ---------------------------------------------------------------------------

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>고객 지원 · 소소도보</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<style>
+  :root{--navy:#36405A;--ink:#2F3850;--sub:#646C82;--mint:#DDEFE8;--cream:#FDFBF5;--sand:#FBFAF4;--line:#E4E7E0;--peach:#FFB997;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--sand);color:var(--ink);font-family:"IBM Plex Sans KR",-apple-system,"Apple SD Gothic Neo",sans-serif;line-height:1.7;}
+  main{max-width:720px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 32px) 20px 64px;}
+  a{color:var(--navy);font-weight:600;}
+  .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);font-family:"Gowun Dodum",sans-serif;font-size:20px;}
+  .brand img{width:36px;height:36px;}
+  h1{font-family:"Gowun Dodum",sans-serif;font-weight:400;font-size:32px;line-height:1.25;margin:28px 0 16px;}
+  h2{font-size:18px;margin:32px 0 8px;padding-top:16px;border-top:1px solid var(--line);}
+  p,li{font-size:15.5px;}
+  ul{padding-left:20px;margin:6px 0;}
+  .cta{display:inline-flex;align-items:center;min-height:48px;padding:0 20px;border:2px solid var(--navy);border-radius:14px;background:var(--navy);color:var(--cream);
+    text-decoration:none;box-shadow:3px 3px 0 var(--peach);margin:8px 0;}
+  dt{font-weight:700;margin-top:14px;}
+  dd{margin:2px 0 0;color:#4F5870;}
+</style>
+</head>
+<body>
+<main>
+  <a class="brand" href="/"><img src="assets/logo.png" alt="">소소도보</a>
+  <h1>고객 지원</h1>
+  <p>소소도보를 쓰다가 막히는 점, 고장, 원하는 기능, 개인정보 요청은 아래로 알려 주세요. 보통 며칠 안에 답해 드려요.</p>
+  <a class="cta" href="https://github.com/kim-misol/sosodobo/issues/new" target="_blank" rel="noopener">문의 남기기 (GitHub)</a>
+  <p style="font-size:13.5px;color:var(--sub)">GitHub 문의는 공개돼요. 이메일 · 참여 코드 같은 개인 정보는 적지 말아 주세요.</p>
+
+  <h2>자주 묻는 것</h2>
+  <dl>
+    <dt>여행에 어떻게 들어가나요?</dt>
+    <dd>여행 관리자에게 초대 링크를 받거나, 참여 코드를 받아 프로필 → “참여 코드로 참여”에 입력해요.</dd>
+    <dt>사진을 지우거나 고치고 싶어요.</dt>
+    <dd>내가 올린 사진은 사진을 연 뒤 “수정” 또는 “삭제”를 눌러요. 여행 관리자는 모든 사진을 고치고 지울 수 있어요.</dd>
+    <dt>정산 금액이 이상해요.</dt>
+    <dd>지출 기록에서 결제한 사람과 나눠 낸 사람을 확인해 주세요. 숙소비는 숙소 정보에서 바뀌어요.</dd>
+    <dt>계정을 지우고 싶어요.</dt>
+    <dd>프로필 → 맨 아래 “계정 삭제”. 자세한 내용은 <a href="privacy.html">개인정보 처리방침</a>을 봐 주세요.</dd>
+  </dl>
+</main>
+</body>
+</html>

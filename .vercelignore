@@ -1,0 +1,4 @@
+# iOS 앱(Capacitor) 프로젝트는 웹사이트 배포에 필요 없어요
+ios/
+app-shell/
+capacitor.config.json

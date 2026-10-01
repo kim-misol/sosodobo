@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>소소도보</title>
+<style>
+  :root{--mint:#DDEFE8;--navy:#36405A;--ink:#2F3850;--sub:#646C82;--cream:#FDFBF5;--peach:#FFB997;}
+  html,body{height:100%;margin:0;}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;box-sizing:border-box;
+    background:var(--cream);color:var(--ink);font-family:-apple-system,"Apple SD Gothic Neo",sans-serif;text-align:center;}
+  img{width:120px;height:120px;}
+  h1{margin:0;font-size:22px;}
+  p{margin:0;color:var(--sub);font-size:15px;line-height:1.5;}
+  button{margin-top:8px;min-height:48px;padding:0 24px;border:2px solid var(--navy);border-radius:14px;background:var(--navy);color:var(--cream);
+    font-size:16px;font-weight:700;box-shadow:3px 3px 0 var(--peach);}
+</style>
+</head>
+<body>
+  <!-- 앱은 https://sosodobo.vercel.app 을 띄워요. 인터넷이 안 될 때만 이 화면이 보여요. -->
+  <img src="logo.png" alt="">
+  <h1>인터넷에 연결되지 않았어요</h1>
+  <p>소소도보는 일정 · 사진 · 정산을 함께 보는 앱이라<br>인터넷 연결이 필요해요.</p>
+  <button type="button" onclick="location.href='https://sosodobo.vercel.app/'">다시 시도</button>
+</body>
+</html>

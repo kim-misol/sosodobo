@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>개인정보 처리방침 · 소소도보</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<style>
+  :root{--navy:#36405A;--ink:#2F3850;--sub:#646C82;--mint:#DDEFE8;--cream:#FDFBF5;--sand:#FBFAF4;--line:#E4E7E0;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--sand);color:var(--ink);font-family:"IBM Plex Sans KR",-apple-system,"Apple SD Gothic Neo",sans-serif;line-height:1.7;}
+  main{max-width:720px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 32px) 20px 64px;}
+  a{color:var(--navy);font-weight:600;}
+  .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);font-family:"Gowun Dodum",sans-serif;font-size:20px;}
+  .brand img{width:36px;height:36px;}
+  h1{font-family:"Gowun Dodum",sans-serif;font-weight:400;font-size:32px;line-height:1.25;margin:28px 0 6px;}
+  .meta{color:var(--sub);font-size:14px;margin:0 0 24px;}
+  h2{font-size:18px;margin:32px 0 8px;padding-top:16px;border-top:1px solid var(--line);}
+  p,li{font-size:15.5px;}
+  ul{padding-left:20px;margin:6px 0;}
+  li{margin:4px 0;}
+  .box{background:var(--mint);border-radius:16px;padding:14px 18px;font-size:15px;}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;margin:8px 0;}
+  th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line);}
+  th{width:34%;font-weight:700;}
+  .wrap{overflow-x:auto;}
+</style>
+</head>
+<body>
+<main>
+  <a class="brand" href="/"><img src="assets/logo.png" alt="">소소도보</a>
+  <h1>개인정보 처리방침</h1>
+  <p class="meta">시행일 2026년 10월 1일 · 소소도보(웹 https://sosodobo.vercel.app 및 iOS 앱)</p>
+
+  <p class="box">소소도보는 함께 여행하는 사람들이 일정 · 사진 · 지출 정산을 같이 보는 서비스예요. 광고를 넣지 않고, 정보를 팔거나 다른 회사에 넘기지 않아요. 서비스를 돌리는 데 꼭 필요한 정보만 받아요.</p>
+
+  <h2>1. 받는 정보</h2>
+  <div class="wrap"><table>
+    <tr><th>로그인할 때</th><td>Google 또는 카카오가 알려 주는 이름, 이메일, 프로필 사진 주소, 계정 식별값</td></tr>
+    <tr><th>여행을 만들고 쓸 때</th><td>여행 이름 · 기간 · 지역 · 한줄 설명, 날짜별 일정, 숙소, 참여자 이름, 지출 기록(금액 · 결제한 사람 · 나눈 사람), 준비물 메모, 티켓 · 예약 파일과 메모</td></tr>
+    <tr><th>사진 · 영상을 올릴 때</th><td>올린 사진 · 영상, 그 안에 담긴 촬영 시각 · 위치(GPS) · 카메라 정보, 캡션, 좋아요 · 댓글</td></tr>
+    <tr><th>자동으로</th><td>로그인을 유지하는 쿠키 (30일). 광고 · 분석 · 추적용 쿠키는 쓰지 않아요.</td></tr>
+  </table></div>
+  <p>사진의 위치 정보는 앨범에서 “어디서 찍었는지”를 보여 주고 일차별로 정리하는 데에만 써요.</p>
+
+  <h2>2. 쓰는 곳</h2>
+  <ul>
+    <li>로그인과 여행 참여 확인</li>
+    <li>같은 여행의 참여자들에게 일정 · 사진 · 정산을 보여 주기</li>
+    <li>여행 지역의 날씨 · 일출/일몰 보여 주기</li>
+  </ul>
+
+  <h2>3. 누가 볼 수 있나요</h2>
+  <ul>
+    <li>여행에 참여한 사람들끼리만 볼 수 있어요.</li>
+    <li>여행 관리자가 “링크 공개”로 바꾸면, 링크를 아는 사람은 로그인 없이 일정과 사진을 볼 수 있어요. 지출 · 정산 · 준비물 · 티켓은 이때도 참여자만 봐요.</li>
+  </ul>
+
+  <h2>4. 맡겨서 처리하는 곳</h2>
+  <ul>
+    <li><b>Vercel</b> (미국): 웹사이트 운영, 사진 · 파일 저장(Vercel Blob)</li>
+    <li><b>Neon</b> (데이터베이스, 싱가포르 지역): 계정 · 여행 · 지출 기록 저장</li>
+    <li><b>Google · 카카오</b>: 로그인 확인</li>
+    <li><b>OpenStreetMap(Nominatim) · Open-Meteo</b>: 날씨를 보여 주려고 여행 “지역” 이름과 그 좌표만 보내요. 이름 · 이메일 같은 개인 정보는 보내지 않아요.</li>
+  </ul>
+
+  <h2>5. 얼마나 보관하나요 · 지우는 방법</h2>
+  <ul>
+    <li>계정을 지울 때까지 보관해요.</li>
+    <li><b>계정 삭제</b>: 앱 · 웹의 프로필 → 맨 아래 “계정 삭제”. 이름 · 이메일 · 로그인 연결이 바로 지워지고, 고르면 내가 올린 사진 · 영상도 함께 지워져요.</li>
+    <li>함께 쓰는 지출 기록과 댓글은 다른 참여자들의 정산이 틀어지지 않도록 여행 안의 이름으로만 남아요. 이것까지 지우려면 여행 관리자에게 기록 삭제나 여행 삭제를 부탁하거나 아래로 문의해 주세요.</li>
+    <li>여행 관리자는 여행을 통째로 지울 수 있고, 이때 그 여행의 사진 · 파일도 함께 지워져요.</li>
+  </ul>
+
+  <h2>6. 어린이</h2>
+  <p>소소도보는 만 14세 미만 어린이를 대상으로 하지 않아요.</p>
+
+  <h2>7. 문의</h2>
+  <p>개인정보 열람 · 정정 · 삭제 요청이나 궁금한 점은 <a href="support.html">고객 지원</a> 페이지의 방법으로 알려 주세요.</p>
+
+  <h2>8. 바뀔 때</h2>
+  <p>이 방침이 바뀌면 이 페이지에 시행일과 함께 알려 드려요.</p>
+</main>
+</body>
+</html>
