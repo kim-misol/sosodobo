@@ -12,7 +12,7 @@ let schemaReady = null;
 
 // 표 구조를 바꿀 때마다 올려 주세요. DB 에 기록된 값과 같으면 아래의 표 만들기·옮기기(수십 번의 쿼리)를
 // 통째로 건너뛰어, 서버가 새로 뜰 때마다 드는 시간을 줄입니다.
-const SCHEMA_VERSION = '2026-09-30.2';
+const SCHEMA_VERSION = '2026-10-02.1';
 
 // 테이블이 없으면 만듭니다. 최초 요청 때 한 번만 실행되도록 캐싱합니다.
 async function ensureSchema() {
@@ -207,6 +207,18 @@ async function ensureSchema() {
         doc_id INTEGER NOT NULL REFERENCES trip_docs(id) ON DELETE CASCADE,
         position INTEGER NOT NULL DEFAULT 0,
         url TEXT NOT NULL, name TEXT, content_type TEXT, size INTEGER, width INTEGER, height INTEGER
+      )`;
+      // 일정 지도: 여행 안 장소 이름(name_key)별 좌표. lat 이 비어 있으면 "못 찾음" (source = 'none')
+      await sql`CREATE TABLE IF NOT EXISTS place_coords (
+        id SERIAL PRIMARY KEY,
+        trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+        name_key TEXT NOT NULL,
+        name TEXT NOT NULL,
+        lat DOUBLE PRECISION, lng DOUBLE PRECISION,
+        source TEXT NOT NULL,
+        map_url TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (trip_id, name_key)
       )`;
       await sql`CREATE TABLE IF NOT EXISTS lodging_guests (
         lodging_id INTEGER NOT NULL REFERENCES lodgings(id) ON DELETE CASCADE,

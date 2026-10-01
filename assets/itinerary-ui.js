@@ -137,7 +137,8 @@
       (state.data.canEdit ? '<button type="button" class="it-edit" data-it="edit-day" data-day="' + day.dayNo + '">✎ 일정 편집</button>' : '') + '</div>' +
       (window.WeatherUI ? window.WeatherUI.dayLine(day.date) : '') +
       (day.title ? '<h2>' + esc(day.title) + '</h2>' : '') +
-      (day.summary ? '<p class="desc">' + esc(day.summary) + '</p>' : '');
+      (day.summary ? '<p class="desc">' + esc(day.summary) + '</p>' : '') +
+      (window.RouteUI ? window.RouteUI.dayHtml(day, lodgings) : '');
     if (empty) {
       out += '<p class="desc it-empty">아직 일정이 비어 있어요.' + (state.data.canEdit ? ' <button type="button" class="it-fill" data-it="edit-day" data-day="' + day.dayNo + '">+ 일정 채우기</button>' : '') + '</p>';
     }
@@ -165,6 +166,7 @@
     if (!els.box || !state.data) return;
     els.box.innerHTML = '<div class="timeline">' + state.data.days.map(dayHtml).join('') + '</div>';
     if (window.Carousel) els.box.querySelectorAll('.carousel').forEach(function (el) { window.Carousel.initCarousel(el); });
+    if (window.RouteUI) window.RouteUI.mount(els.box);
     shareNames();
   }
 

@@ -2,6 +2,8 @@
 //   GET                          → 내가 참여한 여행 목록 (로그인이 꺼져 있으면 전체)
 //   GET    ?id=5                 → 여행 정보 + 나의 역할 (참여자, 또는 링크 공개면 누구나)
 //   GET    ?id=5&part=weather    → 날짜별 날씨 · 일출/일몰 (api/_weather.js)
+//   GET    ?id=5&part=route      → 날짜별 지도 루트 (장소 순서 + 좌표, api/_route.js)
+//   GET    ?id=5&part=place-search&q= / PATCH part=place { name, url | lat,lng } / DELETE part=place&name= → 위치 고치기
 //   POST   { title, region, startDate, endDate, summary?, visibility?, myName? } → 새 여행 (만든 사람 = 관리자)
 //   PATCH  ?id=5 { title?, region?, startDate?, endDate?, summary?, visibility?, membersCanEdit? } → 수정 (관리자)
 //   DELETE ?id=5                 → 삭제 (관리자) — 사람·지출·준비물·사진 모두 지워지고 사진 파일도 정리
@@ -30,6 +32,7 @@ const { del } = require('@vercel/blob');
 const { sql, ensureSchema, sendError, randomJoinCode } = require('./_db');
 const A = require('./_auth');
 const { tripWeather } = require('./_weather');
+const Route = require('./_route');
 const TripCore = require('../assets/trip-core.js');
 const I = require('../assets/itinerary-core.js');
 const DocsCore = require('../assets/docs-core.js');
@@ -512,6 +515,32 @@ async function handler(req, res) {
     if (part === 'docs' || part === 'doc') return handleDocs(req, res, row, { on, uid, member, admin });
 
     // ---- 날짜별 일정 ----
+    // ---- 일정 지도 루트 ----
+    if (part === 'route' || part === 'place' || part === 'place-search') {
+      if (!member && row.visibility !== 'link') {
+        return res.status(on && !uid ? 401 : 403).json({ error: '이 여행에 참여한 뒤에 볼 수 있어요.', code: on && !uid ? 'login_required' : 'join_required' });
+      }
+      const info = A.tripInfo(row);
+      if (part === 'route' && req.method === 'GET') {
+        const routes = await Route.tripRoutes(info, await loadItinerary(info), { sql });
+        return res.status(200).json(Object.assign(routes, { canEdit: member && (admin || row.members_can_edit) }));
+      }
+      if (!(member && (admin || row.members_can_edit))) return res.status(403).json({ error: '일정을 고칠 수 있는 사람만 위치를 바꿀 수 있어요.' });
+      if (part === 'place-search' && req.method === 'GET') {
+        return res.status(200).json({ results: await Route.searchPlaces(info, req.query.q, { sql }) });
+      }
+      if (part === 'place' && req.method === 'PATCH') {
+        const r = await Route.savePlace(info.id, readBody(req), { sql });
+        return r.error ? res.status(400).json(r) : res.status(200).json(r);
+      }
+      if (part === 'place' && req.method === 'DELETE') {
+        const key = require('../assets/route-core.js').nameKey(req.query.name);
+        await sql`DELETE FROM place_coords WHERE trip_id = ${info.id} AND name_key = ${key}`;
+        return res.status(200).json({ ok: true });
+      }
+      return res.status(400).json({ error: '알 수 없는 요청이에요.' });
+    }
+
     if (['itinerary', 'day', 'item', 'item-move', 'lodging', 'day-photo', 'day-photo-move'].indexOf(part) >= 0) {
       return handleItinerary(req, res, row, { on, uid, member, admin, canEdit: member && (admin || row.members_can_edit) });
     }
