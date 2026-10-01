@@ -12,6 +12,8 @@
   body{margin:0;background:var(--sand);color:var(--ink);font-family:"IBM Plex Sans KR",-apple-system,"Apple SD Gothic Neo",sans-serif;line-height:1.7;}
   main{max-width:720px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 32px) 20px 64px;}
   a{color:var(--navy);font-weight:600;}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .back{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border:1.5px solid var(--navy);border-radius:999px;background:var(--cream,#FDFBF5);text-decoration:none;font-size:14.5px;}
   .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);font-family:"Gowun Dodum",sans-serif;font-size:20px;}
   .brand img{width:36px;height:36px;}
   h1{font-family:"Gowun Dodum",sans-serif;font-weight:400;font-size:32px;line-height:1.25;margin:28px 0 6px;}
@@ -29,7 +31,8 @@
 </head>
 <body>
 <main>
-  <a class="brand" href="/"><img src="assets/logo.png" alt="">소소도보</a>
+  <div class="top"><a class="back" href="/" onclick="if (history.length > 1) { history.back(); return false; }">← 돌아가기</a>
+  <a class="brand" href="/"><img src="assets/logo.png" alt="">소소도보</a></div>
   <h1>개인정보 처리방침</h1>
   <p class="meta">시행일 2026년 10월 1일 · 소소도보(웹 https://sosodobo.vercel.app 및 iOS 앱)</p>
 
