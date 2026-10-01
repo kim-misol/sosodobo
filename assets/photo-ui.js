@@ -1404,7 +1404,7 @@
       (canResetLoc ? '<button type="button" class="ph-linkbtn" data-action="reset-location">↺ 원래 위치로' +
         (o.lat !== null && o.lat !== undefined ? '' : ' (위치 없음)') + '</button>' : '') +
       ('<label class="ph-edit-label">캡션<input type="text" name="caption" maxlength="' + P.LIMITS.captionMax +
-      '" value="' + esc(p.caption || '') + '" placeholder="한 줄 캡션 (선택)"></label>' : '') +
+      '" value="' + esc(p.caption || '') + '" placeholder="한 줄 캡션 (선택)"></label>') +
       '<div class="ph-lb-actions">' +
       '<button type="submit" class="ph-act on"' + (state.saving ? ' disabled' : '') + '>' + (state.saving ? '저장 중…' : '저장') + '</button>' +
       '<button type="button" class="ph-act" data-action="edit-cancel">취소</button>' +
