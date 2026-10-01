@@ -354,6 +354,16 @@
     });
   }
 
+  /**
+   * iOS 앱: 상태바(시간 · 배터리) 글자색. 사진 크게 보기처럼 어두운 화면에서는 흰 글자로.
+   * 웹에서는 아무것도 안 해요. (photo-ui · docs-ui 가 부름)
+   */
+  window.setAppStatusBarDark = function (dark) {
+    var C = window.Capacitor;
+    var sb = C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.StatusBar;
+    if (sb) sb.setStyle({ style: dark ? 'DARK' : 'LIGHT' }).catch(function () { /* 괜찮음 */ });
+  };
+
   function init() {
     els.top = $('#m-top');
     els.tabbar = $('#m-tabbar');

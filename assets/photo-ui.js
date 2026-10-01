@@ -853,6 +853,7 @@
     state.lightboxId = id;
     els.lightbox.hidden = false;
     document.body.classList.add('ph-noscroll');
+    if (window.setAppStatusBarDark) window.setAppStatusBarDark(true);
     if (isMobile()) openFeed(id);
     else renderLightbox();
     els.lightbox.focus();
@@ -983,6 +984,7 @@
     els.lightbox.hidden = true;
     els.lightbox.innerHTML = '';
     document.body.classList.remove('ph-noscroll');
+    if (window.setAppStatusBarDark) window.setAppStatusBarDark(false);
   }
 
   function step(delta) {

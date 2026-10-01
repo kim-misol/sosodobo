@@ -136,9 +136,10 @@
     });
     document.body.appendChild(viewer);
     document.body.classList.add('tsheet-open');
+    if (window.setAppStatusBarDark) window.setAppStatusBarDark(true);
   }
   function closeViewer() {
-    if (viewer) { viewer.remove(); viewer = null; }
+    if (viewer) { viewer.remove(); viewer = null; if (window.setAppStatusBarDark) window.setAppStatusBarDark(false); }
     if (!sheet) document.body.classList.remove('tsheet-open');
   }
 
