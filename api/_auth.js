@@ -72,8 +72,10 @@ function isHttps(req) {
   return !/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
 }
 
-function cookieString(name, value, { maxAgeSec, secure }) {
-  const parts = [name + '=' + encodeURIComponent(value), 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=' + maxAgeSec];
+function cookieString(name, value, { maxAgeSec, secure, crossSitePost }) {
+  // crossSitePost: Apple 로그인은 결과를 다른 사이트에서 POST 로 보내서, 그때도 오도록 SameSite=None (Secure 필수)
+  const sameSite = crossSitePost && secure ? 'SameSite=None' : 'SameSite=Lax';
+  const parts = [name + '=' + encodeURIComponent(value), 'Path=/', 'HttpOnly', sameSite, 'Max-Age=' + maxAgeSec];
   if (secure) parts.push('Secure');
   return parts.join('; ');
 }
@@ -92,6 +94,7 @@ function providersConfigured(env) {
   return {
     google: !!(e.GOOGLE_CLIENT_ID && e.GOOGLE_CLIENT_SECRET),
     kakao: !!e.KAKAO_REST_API_KEY,
+    apple: !!(e.APPLE_CLIENT_ID && e.APPLE_TEAM_ID && e.APPLE_KEY_ID && e.APPLE_PRIVATE_KEY),
   };
 }
 
@@ -138,7 +141,8 @@ function sessionUserId(req, env) {
 function setOAuthState(res, req, data, env) {
   const secret = (env || process.env).SESSION_SECRET;
   const exp = Date.now() + STATE_MINUTES * 60 * 1000;
-  appendCookie(res, cookieString(STATE_COOKIE, sign(Object.assign({}, data, { exp }), secret), { maxAgeSec: STATE_MINUTES * 60, secure: isHttps(req) }));
+  appendCookie(res, cookieString(STATE_COOKIE, sign(Object.assign({}, data, { exp }), secret),
+    { maxAgeSec: STATE_MINUTES * 60, secure: isHttps(req), crossSitePost: data && data.p === 'apple' }));
 }
 
 function readOAuthState(req, env) {

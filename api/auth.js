@@ -2,6 +2,8 @@
 //   GET  ?action=me                          → 로그인 상태, 내 계정, 참여한 여행 수
 //   GET  ?action=login&provider=google|kakao → 로그인 화면으로 이동 (&link=1 이면 지금 계정에 이어 붙이기)
 //   GET  /api/auth/:provider/callback        → (vercel.json 이 ?action=callback 으로 넘김) 로그인 마치고 홈으로
+//                                              (Apple 은 같은 주소로 POST — 결과가 form 본문에 와요)
+//   POST /api/auth/apple/notify              → Apple 서버 알림: 사용자가 Apple 로그인 연결을 끊거나 Apple 계정을 지움
 //   POST ?action=logout                      → 로그아웃
 //   POST ?action=delete-account { confirm: '삭제', deletePhotos? } → 계정 삭제 (App Store 요구사항)
 //   --- iOS 앱 (Capacitor): 구글은 앱 안 웹뷰 로그인을 막아서, 로그인은 시스템 로그인 창(ASWebAuthenticationSession)에서
@@ -24,9 +26,60 @@ const APP_CODE_SECONDS = 120;
 function readBody(req) {
   if (!req.body) return {};
   if (typeof req.body === 'string') {
-    try { return JSON.parse(req.body); } catch { return {}; }
+    try { return JSON.parse(req.body); } catch { /* form 본문일 수도 */ }
+    return Object.fromEntries(new URLSearchParams(req.body));
   }
   return req.body;
+}
+
+/**
+ * 계정 지우기 (프로필의 "계정 삭제", Apple 의 계정 삭제 알림이 같이 씀).
+ * 내가 관리자인 여행은 계정이 있는 다른 참여자 중 가장 먼저 들어온 사람에게 넘기고,
+ * 여행 안의 이름 · 지출 기록은 함께 쓰는 정산이라 이름만 남겨요. → 지운 사진 수
+ */
+async function deleteUserAccount(uid, opts) {
+  const mine = await sql`SELECT id, trip_id, role FROM travelers WHERE user_id = ${uid}`;
+  const ids = mine.rows.map((r) => r.id);
+  let removedPhotos = 0;
+  if (opts && opts.deletePhotos && ids.length) {
+    const photos = await sql`DELETE FROM photos WHERE uploader_id = ANY(${ids}) RETURNING url, thumb_url`;
+    removedPhotos = photos.rows.length;
+    const urls = [];
+    photos.rows.forEach((p) => { urls.push(p.url); if (p.thumb_url) urls.push(p.thumb_url); });
+    const blobUrls = urls.filter((u) => /\.blob\.vercel-storage\.com\//.test(String(u)));
+    if (blobUrls.length) {
+      try { await del(blobUrls, { token: findBlobToken(process.env) || undefined }); } catch (err) { console.error('Blob 파일 삭제 실패', err); }
+    }
+  }
+  for (const t of mine.rows.filter((r) => r.role === 'admin')) {
+    await sql`
+      UPDATE travelers SET role = 'admin'
+      WHERE id = (SELECT id FROM travelers WHERE trip_id = ${t.trip_id} AND user_id IS NOT NULL AND user_id <> ${uid} ORDER BY id LIMIT 1)`;
+    await sql`UPDATE travelers SET role = 'member' WHERE id = ${t.id}`;
+  }
+  await sql`DELETE FROM users WHERE id = ${uid}`;
+  return removedPhotos;
+}
+
+// Apple 서버 알림의 서명 확인용 공개키 (몇 시간 기억)
+let appleKeys = { at: 0, keys: [] };
+async function verifyAppleJwt(token, fetchImpl) {
+  const [h, p, s] = String(token || '').split('.');
+  if (!h || !p || !s) return null;
+  const head = JSON.parse(Buffer.from(h, 'base64url').toString('utf8'));
+  if (head.alg !== 'RS256') return null;
+  if (!appleKeys.keys.length || Date.now() - appleKeys.at > 6 * 3600000) {
+    const r = await (fetchImpl || fetch)('https://appleid.apple.com/auth/keys');
+    appleKeys = { at: Date.now(), keys: ((await r.json()) || {}).keys || [] };
+  }
+  const jwk = appleKeys.keys.find((k) => k.kid === head.kid);
+  if (!jwk) return null;
+  const ok = crypto.verify('RSA-SHA256', Buffer.from(h + '.' + p), crypto.createPublicKey({ key: jwk, format: 'jwk' }), Buffer.from(s, 'base64url'));
+  if (!ok) return null;
+  const claims = JSON.parse(Buffer.from(p, 'base64url').toString('utf8'));
+  if (claims.iss !== 'https://appleid.apple.com') return null;
+  if (claims.exp && claims.exp * 1000 < Date.now()) return null;
+  return claims;
 }
 
 function redirect(res, location) {
@@ -116,16 +169,18 @@ module.exports = async function handler(req, res) {
 
     if (action === 'callback') {
       const provider = String(req.query.provider || '');
+      // Apple 은 결과를 POST 본문으로, 나머지는 주소(query)로
+      const q = Object.assign({}, req.query, req.method === 'POST' ? readBody(req) : {});
       const st = A.readOAuthState(req);
       A.clearOAuthState(res, req);
       const back = (result) => (st && st.app ? APP_SCHEME + '://auth?error=' + result : '/?login=' + result);
-      if (req.query.error) return redirect(res, back('cancelled'));
-      if (!st || st.p !== provider || !req.query.state || st.n !== String(req.query.state) || !req.query.code) {
+      if (q.error) return redirect(res, back('cancelled'));
+      if (!st || st.p !== provider || !q.state || st.n !== String(q.state) || !q.code) {
         return redirect(res, back('expired'));
       }
       let uid;
       try {
-        const profile = await O.fetchProfile(provider, String(req.query.code), O.redirectUri(req, provider));
+        const profile = await O.fetchProfile(provider, String(q.code), O.redirectUri(req, provider), undefined, undefined, { user: q.user });
         uid = await upsertUser(profile, st.link || null);
       } catch (err) {
         console.error(err);
@@ -139,6 +194,25 @@ module.exports = async function handler(req, res) {
       }
       A.setSession(res, req, uid);
       return redirect(res, st.link ? '/#profile' : '/');
+    }
+
+    if (action === 'apple-notify') {
+      if (req.method !== 'POST') return fail(res, 405, 'POST만 지원합니다.');
+      const claims = await verifyAppleJwt(readBody(req).payload).catch(() => null);
+      const allowed = [process.env.APPLE_CLIENT_ID, process.env.APPLE_APP_ID || 'com.sosodobo.app'];
+      if (!claims || allowed.indexOf(claims.aud) < 0) return fail(res, 400, '확인할 수 없는 알림이에요.');
+      let ev = claims.events;
+      if (typeof ev === 'string') { try { ev = JSON.parse(ev); } catch { ev = null; } }
+      if (ev && ev.sub && (ev.type === 'consent-revoked' || ev.type === 'account-delete')) {
+        const found = await sql`SELECT user_id FROM user_identities WHERE provider = 'apple' AND provider_user_id = ${String(ev.sub)}`;
+        await sql`DELETE FROM user_identities WHERE provider = 'apple' AND provider_user_id = ${String(ev.sub)}`;
+        // 다른 로그인(구글 · 카카오)이 없으면 들어올 방법이 없는 계정이라 지워요
+        for (const r of found.rows) {
+          const left = await sql`SELECT 1 FROM user_identities WHERE user_id = ${r.user_id} LIMIT 1`;
+          if (!left.rows.length) await deleteUserAccount(r.user_id, { deletePhotos: false });
+        }
+      }
+      return res.status(200).json({ ok: true });
     }
 
     if (action === 'app-link-ticket') {
@@ -169,28 +243,7 @@ module.exports = async function handler(req, res) {
       if (!uid) return fail(res, 401, '로그인이 필요해요.', 'login_required');
       const b = readBody(req);
       if (String(b.confirm || '').trim() !== '삭제') return fail(res, 400, '확인을 위해 "삭제"라고 입력해 주세요.', 'confirm_required');
-      const mine = await sql`SELECT id, trip_id, role FROM travelers WHERE user_id = ${uid}`;
-      const ids = mine.rows.map((r) => r.id);
-      let removedPhotos = 0;
-      if (b.deletePhotos && ids.length) {
-        const photos = await sql`DELETE FROM photos WHERE uploader_id = ANY(${ids}) RETURNING url, thumb_url`;
-        removedPhotos = photos.rows.length;
-        const urls = [];
-        photos.rows.forEach((p) => { urls.push(p.url); if (p.thumb_url) urls.push(p.thumb_url); });
-        const blobUrls = urls.filter((u) => /\.blob\.vercel-storage\.com\//.test(String(u)));
-        if (blobUrls.length) {
-          try { await del(blobUrls, { token: findBlobToken(process.env) || undefined }); } catch (err) { console.error('Blob 파일 삭제 실패', err); }
-        }
-      }
-      // 내가 관리자였던 여행: 계정이 있는 다른 참여자 중 가장 먼저 들어온 사람에게 관리자를 넘김
-      for (const t of mine.rows.filter((r) => r.role === 'admin')) {
-        await sql`
-          UPDATE travelers SET role = 'admin'
-          WHERE id = (SELECT id FROM travelers WHERE trip_id = ${t.trip_id} AND user_id IS NOT NULL AND user_id <> ${uid} ORDER BY id LIMIT 1)`;
-        await sql`UPDATE travelers SET role = 'member' WHERE id = ${t.id}`;
-      }
-      // 계정 · 로그인 연결 삭제 (여행 안의 이름 · 지출 기록은 함께 쓰는 정산이라 이름만 남음)
-      await sql`DELETE FROM users WHERE id = ${uid}`;
+      const removedPhotos = await deleteUserAccount(uid, { deletePhotos: !!b.deletePhotos });
       A.clearSession(res, req);
       return res.status(200).json({ ok: true, removedPhotos });
     }

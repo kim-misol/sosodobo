@@ -12,7 +12,7 @@ const ENV = {
 
 /** process.env 를 잠시 바꿔 fn 실행 */
 async function withEnv(env, fn) {
-  const keys = Object.keys(ENV).concat(['PUBLIC_BASE_URL']);
+  const keys = Object.keys(ENV).concat(['PUBLIC_BASE_URL', 'APPLE_TEAM_ID', 'APPLE_KEY_ID', 'APPLE_CLIENT_ID', 'APPLE_PRIVATE_KEY']);
   const saved = {};
   keys.forEach((k) => { saved[k] = process.env[k]; delete process.env[k]; });
   Object.assign(process.env, env);
@@ -50,7 +50,7 @@ test('authConfig: 스위치와 필수 값이 모두 있어야 켜진다', () => 
   assert.equal(A.authConfig(Object.assign({}, ENV, { SESSION_SECRET: 'short' })).enabled, false, '비밀값이 짧음');
   assert.equal(A.authConfig(Object.assign({}, ENV, { TRIP_JOIN_CODE: '' })).enabled, true, '참여 코드는 여행마다 DB 에 있어 환경변수는 선택');
   const onlyKakao = Object.assign({}, ENV, { GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '' });
-  assert.deepEqual(A.authConfig(onlyKakao).providers, { google: false, kakao: true });
+  assert.deepEqual(A.authConfig(onlyKakao).providers, { google: false, kakao: true, apple: false });
   assert.equal(A.authConfig(onlyKakao).enabled, true);
 });
 
@@ -116,7 +116,7 @@ test('GET /api/auth?action=me: 꺼져 있으면 enabled:false, 켜져 있고 로
     const res = await call(loadHandler('auth.js', createFakeSql()), { query: { action: 'me' } });
     assert.equal(res.body.enabled, true);
     assert.equal(res.body.user, null);
-    assert.deepEqual(res.body.providers, { google: true, kakao: true });
+    assert.deepEqual(res.body.providers, { google: true, kakao: true, apple: false });
   });
 });
 
@@ -292,5 +292,118 @@ test('계정 삭제: "삭제" 확인, 관리자는 다른 참여자에게 넘기
     assert.deepEqual(promote.values, [3, 5], '여행 3 에서 나(5) 말고 다른 계정에게');
     assert.ok(sql.calls.some((c) => c.text.startsWith('DELETE FROM users') && c.values[0] === 5));
     assert.ok(cookiesFrom(res).includes(A.SESSION_COOKIE + '='), '로그아웃 쿠키');
+  });
+});
+
+// ---- Apple 로그인 ---------------------------------------------------------------
+
+const crypto = require('node:crypto');
+const O = require('../api/_oauth.js');
+
+function appleEnv() {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  return {
+    env: Object.assign({}, ENV, {
+      PUBLIC_BASE_URL: 'https://sosodobo.vercel.app',
+      APPLE_TEAM_ID: 'TEAM123456', APPLE_KEY_ID: 'KEY1234567', APPLE_CLIENT_ID: 'com.sosodobo.web',
+      APPLE_PRIVATE_KEY: privateKey.export({ type: 'pkcs8', format: 'pem' }).replace(/\n/g, '\\n'), // Vercel 에 \n 글자로 들어온 경우
+    }),
+    publicKey,
+  };
+}
+const jwtPart = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+
+test('Apple client_secret: .p8 키로 서명한 ES256 JWT (팀 · 키 · 서비스 ID)', () => {
+  const { env, publicKey } = appleEnv();
+  const t = O.appleClientSecret(env, Date.parse('2026-10-01T00:00:00Z'));
+  const [h, p, s] = t.split('.');
+  assert.deepEqual(JSON.parse(Buffer.from(h, 'base64url')), { alg: 'ES256', kid: 'KEY1234567' });
+  const claims = JSON.parse(Buffer.from(p, 'base64url'));
+  assert.equal(claims.iss, 'TEAM123456');
+  assert.equal(claims.sub, 'com.sosodobo.web');
+  assert.equal(claims.aud, 'https://appleid.apple.com');
+  assert.ok(crypto.verify('sha256', Buffer.from(h + '.' + p), { key: publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(s, 'base64url')));
+});
+
+test('Apple 로그인: form_post 로 시작, state 쿠키는 SameSite=None, POST 콜백으로 계정 만들기 (이름은 첫 로그인 때만)', async () => {
+  const { env } = appleEnv();
+  await withEnv(env, async () => {
+    const me = await call(loadHandler('auth.js', createFakeSql()), { query: { action: 'me' } });
+    assert.equal(me.body.providers.apple, true);
+    const start = await call(loadHandler('auth.js', createFakeSql()), { query: { action: 'login', provider: 'apple' } });
+    const loc = new URL(start.headers.Location);
+    assert.equal(loc.origin + loc.pathname, 'https://appleid.apple.com/auth/authorize');
+    assert.equal(loc.searchParams.get('response_mode'), 'form_post');
+    assert.equal(loc.searchParams.get('scope'), 'name email');
+    assert.equal(loc.searchParams.get('redirect_uri'), 'https://sosodobo.vercel.app/api/auth/apple/callback');
+    const setCookie = [].concat(start.headers['Set-Cookie']).join(' ');
+    assert.match(setCookie, /SameSite=None/);
+    assert.match(setCookie, /Secure/);
+    const state = loc.searchParams.get('state');
+
+    const realFetch = global.fetch;
+    global.fetch = async (url, opts) => {
+      assert.match(String(url), /appleid\.apple\.com\/auth\/token/);
+      assert.match(opts.body, /client_secret=ey/);
+      const idToken = jwtPart({ alg: 'RS256' }) + '.' + jwtPart({ iss: 'https://appleid.apple.com', aud: 'com.sosodobo.web', sub: 'apple-001', email: 'x@privaterelay.appleid.com' }) + '.sig';
+      return new Response(JSON.stringify({ id_token: idToken, access_token: 'a' }), { status: 200 });
+    };
+    try {
+      const sql = createFakeSql((text) => {
+        if (text.startsWith('SELECT user_id FROM user_identities')) return { rows: [] };
+        if (text.startsWith('INSERT INTO users')) return { rows: [{ id: 55 }] };
+        return { rows: [] };
+      });
+      const done = await call(loadHandler('auth.js', sql), {
+        method: 'POST',
+        query: { action: 'callback', provider: 'apple' },
+        headers: { cookie: cookiesFrom(start) },
+        body: 'code=c1&state=' + encodeURIComponent(state) + '&user=' + encodeURIComponent(JSON.stringify({ name: { firstName: '미솔', lastName: '김' } })),
+      });
+      assert.equal(done.headers.Location, '/');
+      const ins = sql.calls.find((c) => c.text.startsWith('INSERT INTO users'));
+      assert.ok(ins.values.includes('김미솔'), '성+이름');
+      assert.ok(sql.calls.some((c) => c.text.startsWith('INSERT INTO user_identities') && c.values.includes('apple-001')));
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
+});
+
+test('Apple 서버 알림: 서명이 맞는 연결 끊기 알림이면 Apple 연결을 지우고, 다른 로그인이 없으면 계정도 지운다', async () => {
+  const { env } = appleEnv();
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const jwk = Object.assign(publicKey.export({ format: 'jwk' }), { kid: 'k1', alg: 'RS256' });
+  const sign = (claims) => {
+    const h = jwtPart({ alg: 'RS256', kid: 'k1' });
+    const p = jwtPart(claims);
+    return h + '.' + p + '.' + crypto.sign('RSA-SHA256', Buffer.from(h + '.' + p), privateKey).toString('base64url');
+  };
+  await withEnv(env, async () => {
+    const realFetch = global.fetch;
+    global.fetch = async () => new Response(JSON.stringify({ keys: [jwk] }), { status: 200 });
+    try {
+      const sql = createFakeSql((text) => {
+        if (text.startsWith('SELECT user_id FROM user_identities')) return { rows: [{ user_id: 55 }] };
+        if (text.startsWith('SELECT 1 FROM user_identities')) return { rows: [] };
+        if (text.startsWith('SELECT id, trip_id, role FROM travelers')) return { rows: [] };
+        return { rows: [] };
+      });
+      const events = JSON.stringify({ type: 'consent-revoked', sub: 'apple-001' });
+      const ok = await call(loadHandler('auth.js', sql), { method: 'POST', query: { action: 'apple-notify' },
+        body: { payload: sign({ iss: 'https://appleid.apple.com', aud: 'com.sosodobo.app', events }) } });
+      assert.equal(ok.statusCode, 200);
+      assert.ok(sql.calls.some((c) => c.text.startsWith("DELETE FROM user_identities WHERE provider = 'apple'")));
+      assert.ok(sql.calls.some((c) => c.text.startsWith('DELETE FROM users') && c.values[0] === 55));
+
+      const forged = await call(loadHandler('auth.js', createFakeSql()), { method: 'POST', query: { action: 'apple-notify' },
+        body: { payload: sign({ iss: 'https://appleid.apple.com', aud: 'com.other.app', events }) } });
+      assert.equal(forged.statusCode, 400, '다른 앱 알림은 무시');
+      const bad = await call(loadHandler('auth.js', createFakeSql()), { method: 'POST', query: { action: 'apple-notify' },
+        body: { payload: 'x.y.z' } });
+      assert.equal(bad.statusCode, 400);
+    } finally {
+      global.fetch = realFetch;
+    }
   });
 });

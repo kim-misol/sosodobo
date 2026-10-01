@@ -86,6 +86,7 @@
   }
 
   var GOOGLE_G = '<svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.7 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17.1z"/><path fill="#FBBC05" d="M10.6 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.6l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.2 0-11.5-4.2-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
+  var APPLE_LOGO = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>';
   var KAKAO_BUBBLE = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#191600" d="M12 3C6.5 3 2 6.6 2 11c0 2.8 1.9 5.3 4.7 6.7l-1 3.6c-.1.3.3.6.6.4l4.3-2.8c.5.1 1 .1 1.4.1 5.5 0 10-3.6 10-8S17.5 3 12 3z"/></svg>';
 
   var LOGIN_ERRORS = {
@@ -161,6 +162,7 @@
       (errorText ? '<p class="auth-err" role="alert">' + esc(errorText) + '</p>' : '') +
       (note ? '<p class="auth-note">' + esc(note) + '</p>' : '') +
       '<div class="auth-buttons">' +
+      (p.apple ? '<a class="auth-sso apple" href="' + API + '?action=login&amp;provider=apple">' + APPLE_LOGO + 'Apple로 계속하기</a>' : '') +
       (p.google ? '<a class="auth-sso google" href="' + API + '?action=login&amp;provider=google">' + GOOGLE_G + 'Google로 계속하기</a>' : '') +
       (p.kakao ? '<a class="auth-sso kakao" href="' + API + '?action=login&amp;provider=kakao">' + KAKAO_BUBBLE + '카카오로 계속하기</a>' : '') +
       '</div><p class="auth-fine">' + (note ? '처음이면 계정이 바로 만들어지고, 초대 링크로 들어와서 참여 코드는 입력하지 않아도 돼요.'
@@ -398,7 +400,7 @@
   // ---------------------------------------------------------------------------
   // 참여자: 계정 정보 공개 · PC 상단 계정 표시
   // ---------------------------------------------------------------------------
-  var PROVIDER_LABEL = { google: 'Google', kakao: '카카오' };
+  var PROVIDER_LABEL = { google: 'Google', kakao: '카카오', apple: 'Apple' };
 
   function renderNavAccount() {
     var box = document.getElementById('nav-account');
@@ -416,14 +418,14 @@
     var m = AuthUI.member;
     if (!m) return '';
     var providers = (AuthUI.me && AuthUI.me.providers) || {};
-    var rows = ['google', 'kakao'].filter(function (p) { return providers[p] || m.linked.indexOf(p) >= 0; }).map(function (p) {
+    var rows = ['apple', 'google', 'kakao'].filter(function (p) { return providers[p] || m.linked.indexOf(p) >= 0; }).map(function (p) {
       var on = m.linked.indexOf(p) >= 0;
-      return '<div class="m-account"><span class="m-account-dot ' + p + '" aria-hidden="true">' + (p === 'google' ? 'G' : 'K') + '</span>' +
+      return '<div class="m-account"><span class="m-account-dot ' + p + '" aria-hidden="true">' + (p === 'google' ? 'G' : p === 'kakao' ? 'K' : APPLE_LOGO) + '</span>' +
         PROVIDER_LABEL[p] + (on ? '<span class="m-account-state on">연결됨 ✓</span>'
           : '<a class="m-account-state" href="' + API + '?action=login&amp;provider=' + p + '&amp;link=1">연결하기 ›</a>') + '</div>';
     }).join('');
     return '<section class="m-block"><div class="m-block-head"><h2>로그인 계정</h2></div>' + rows +
-      '<p class="m-note" style="margin:8px 0 0">둘 다 이어 두면 어느 쪽으로 로그인해도 같은 사람으로 들어와요.</p></section>';
+      '<p class="m-note" style="margin:8px 0 0">여러 개를 이어 두면 어느 쪽으로 로그인해도 같은 사람으로 들어와요.</p></section>';
   };
 
   AuthUI.logoutHtml = function () {

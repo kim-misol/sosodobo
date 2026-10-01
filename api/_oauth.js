@@ -1,4 +1,6 @@
-// Google · 카카오 OAuth (authorization code 방식). 네트워크 호출은 fetchImpl 로 받아 테스트에서 바꿔 끼워요.
+// Google · 카카오 · Apple OAuth (authorization code 방식). 네트워크 호출은 fetchImpl 로 받아 테스트에서 바꿔 끼워요.
+const crypto = require('node:crypto');
+
 const PROVIDERS = {
   google: {
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -12,12 +14,48 @@ const PROVIDERS = {
     userUrl: 'https://kapi.kakao.com/v2/user/me',
     scope: '', // 닉네임·프로필 사진은 카카오 앱 동의항목에서 켭니다
   },
+  // Apple: 이름 · 이메일을 받으려면 결과를 form_post(POST)로 돌려줘요. 이름은 처음 로그인할 때 한 번만 와요.
+  apple: {
+    authUrl: 'https://appleid.apple.com/auth/authorize',
+    tokenUrl: 'https://appleid.apple.com/auth/token',
+    scope: 'name email',
+  },
 };
+
+function b64url(buf) {
+  return Buffer.from(buf).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+/** Vercel 환경변수에 넣은 .p8 키 (줄바꿈이 \n 글자로 들어와도 되게) */
+function applePrivateKey(e) {
+  return String(e.APPLE_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
+}
+
+/**
+ * Apple 은 client_secret 대신 .p8 키로 서명한 짧은 JWT(ES256)를 받아요.
+ * https://developer.apple.com/documentation/accountorganizationaldatasharing/creating-a-client-secret
+ */
+function appleClientSecret(env, nowMs) {
+  const e = env || process.env;
+  const now = Math.floor((nowMs || Date.now()) / 1000);
+  const head = b64url(JSON.stringify({ alg: 'ES256', kid: e.APPLE_KEY_ID }));
+  const body = b64url(JSON.stringify({ iss: e.APPLE_TEAM_ID, iat: now, exp: now + 300, aud: 'https://appleid.apple.com', sub: e.APPLE_CLIENT_ID }));
+  const sig = crypto.sign('sha256', Buffer.from(head + '.' + body), { key: applePrivateKey(e), dsaEncoding: 'ieee-p1363' });
+  return head + '.' + body + '.' + b64url(sig);
+}
+
+/** JWT 의 가운데(payload)만 읽기 — 서명 확인은 하지 않아요 (Apple 토큰 주소에서 TLS 로 바로 받은 것만 이걸로) */
+function decodeJwtPayload(token) {
+  const part = String(token || '').split('.')[1];
+  if (!part) return null;
+  try { return JSON.parse(Buffer.from(part.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); } catch { return null; }
+}
 
 function credentials(provider, env) {
   const e = env || process.env;
   if (provider === 'google') return { clientId: e.GOOGLE_CLIENT_ID, clientSecret: e.GOOGLE_CLIENT_SECRET };
   if (provider === 'kakao') return { clientId: e.KAKAO_REST_API_KEY, clientSecret: e.KAKAO_CLIENT_SECRET || '' };
+  if (provider === 'apple') return { clientId: e.APPLE_CLIENT_ID, clientSecret: null }; // 비밀값은 그때그때 appleClientSecret 으로
   return null;
 }
 
@@ -39,22 +77,40 @@ function authorizeUrl(provider, { clientId, redirect, state }) {
   const q = new URLSearchParams({ client_id: clientId, redirect_uri: redirect, response_type: 'code', state });
   if (p.scope) q.set('scope', p.scope);
   if (provider === 'google') q.set('prompt', 'select_account');
+  if (provider === 'apple') q.set('response_mode', 'form_post');
   return p.authUrl + '?' + q.toString();
 }
 
-/** code → { provider, providerUserId, email, name, avatarUrl } */
-async function fetchProfile(provider, code, redirect, env, fetchImpl) {
+/**
+ * code → { provider, providerUserId, email, name, avatarUrl }
+ * extra.user: Apple 이 처음 로그인 때만 같이 보내는 이름 JSON ({"name":{"firstName","lastName"}})
+ */
+async function fetchProfile(provider, code, redirect, env, fetchImpl, extra) {
   const f = fetchImpl || fetch;
   const p = PROVIDERS[provider];
   const cred = credentials(provider, env);
   const form = new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirect, client_id: cred.clientId });
-  if (cred.clientSecret) form.set('client_secret', cred.clientSecret);
+  if (provider === 'apple') form.set('client_secret', appleClientSecret(env));
+  else if (cred.clientSecret) form.set('client_secret', cred.clientSecret);
   const tokenRes = await f(p.tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
     body: form.toString(),
   });
   const token = await tokenRes.json().catch(() => ({}));
+  if (provider === 'apple') {
+    // id_token 은 Apple 토큰 주소에서 우리 비밀값으로 바로 받은 것이라 내용만 확인해요
+    const claims = decodeJwtPayload(token.id_token);
+    if (!tokenRes.ok || !claims || !claims.sub) throw new Error('로그인 토큰을 받지 못했어요' + (token.error ? ' (' + token.error + ')' : ''));
+    if (claims.iss !== 'https://appleid.apple.com' || claims.aud !== cred.clientId) throw new Error('Apple 로그인 정보가 이 앱 것이 아니에요.');
+    let name = null;
+    try {
+      const u = typeof (extra && extra.user) === 'string' ? JSON.parse(extra.user) : (extra && extra.user) || null;
+      const n = u && u.name;
+      if (n) name = [n.lastName, n.firstName].filter(Boolean).join('') || null; // 한국식: 성+이름
+    } catch { /* 이름은 없어도 돼요 */ }
+    return { provider, providerUserId: String(claims.sub), email: claims.email || null, name, avatarUrl: null };
+  }
   if (!tokenRes.ok || !token.access_token) {
     throw new Error('로그인 토큰을 받지 못했어요' + (token.error ? ' (' + token.error + ')' : ''));
   }
@@ -77,4 +133,4 @@ async function fetchProfile(provider, code, redirect, env, fetchImpl) {
   };
 }
 
-module.exports = { PROVIDERS, credentials, redirectUri, authorizeUrl, fetchProfile };
+module.exports = { PROVIDERS, credentials, redirectUri, authorizeUrl, fetchProfile, appleClientSecret, decodeJwtPayload };

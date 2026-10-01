@@ -4,6 +4,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/auth/apple/notify",
+      "destination": "/api/auth?action=apple-notify"
+    },
+    {
       "source": "/api/auth/:provider/callback",
       "destination": "/api/auth?action=callback&provider=:provider"
     }
