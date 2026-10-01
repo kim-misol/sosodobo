@@ -82,7 +82,7 @@ npx cap open ios
 | 광고 · 분석 · 추적 | 아니오 | — | 아니오 | — |
 
 ### 7. 빌드 올리기
-- 서명 팀: `M2S8W9RG4Q` (Misol Kim, 개인) — 프로젝트에 설정됨, 자동 서명
+- 서명 팀: `W8RQH9QGKQ` (App ID · Apple 로그인 키가 있는 팀. Xcode 는 이 팀을 "Personal Team" 으로 잘못 표시할 수 있어요) — 프로젝트에 설정됨, 자동 서명
 - Xcode → Window → Organizer → Archives 에 `소소도보 1.0 (1)` 이 있어요 → Distribute App → App Store Connect → Upload
   (명령줄 업로드는 Xcode 에 저장된 Apple 계정을 못 써서 "Failed Registering Bundle Identifier" 로 실패해요)
 - 다시 만들 때: Xcode 에서 `ios/App/App.xcworkspace` 열고 Product → Archive (기기: Any iOS Device)
