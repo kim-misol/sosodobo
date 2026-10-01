@@ -82,8 +82,20 @@ npx cap open ios
 | 광고 · 분석 · 추적 | 아니오 | — | 아니오 | — |
 
 ### 7. 빌드 올리기
-- Xcode → Product → Archive → Distribute App → App Store Connect
+- 서명 팀: `M2S8W9RG4Q` (Misol Kim, 개인) — 프로젝트에 설정됨, 자동 서명
+- Xcode → Window → Organizer → Archives 에 `소소도보 1.0 (1)` 이 있어요 → Distribute App → App Store Connect → Upload
+  (명령줄 업로드는 Xcode 에 저장된 Apple 계정을 못 써서 "Failed Registering Bundle Identifier" 로 실패해요)
+- 다시 만들 때: Xcode 에서 `ios/App/App.xcworkspace` 열고 Product → Archive (기기: Any iOS Device)
+- 올릴 때마다 Build 번호(CURRENT_PROJECT_VERSION)를 1씩 올려야 해요
 - TestFlight 로 내 폰에서 먼저 써 보고 → 심사 제출
+
+### 8. 스크린샷 (준비됨)
+`ios/screenshots/6.9in/` — 1320×2868, 6.9인치 칸에 그대로 올리면 돼요 (데모 여행 화면, 9:41 상태바).
+1 홈 · 2 사진첩 · 3 숙소 · 이동 · 4 정산 · 5 함께 가는 사람
+
+### 9. 심사용 데모
+- 데모 여행 "Demo Trip - Jeju 3 days" (Apple 로그인 계정이 관리자). 참여 코드는 공개 저장소라 여기 적지 않아요 —
+  여행 화면 → 여행 ▾ → 참여 코드에서 확인해 심사 메모(App Review Information → Notes)에 넣기.
 
 ## 출시 전 확인할 것
 - [ ] 실제 기기에서 구글 · 카카오 로그인 (시스템 로그인 창 → 앱으로 돌아오기)
