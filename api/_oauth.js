@@ -26,9 +26,17 @@ function b64url(buf) {
   return Buffer.from(buf).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
-/** Vercel 환경변수에 넣은 .p8 키 (줄바꿈이 \n 글자로 들어와도 되게) */
+/**
+ * Vercel 환경변수에 넣은 .p8 키 → 서명용 키.
+ * 붙여 넣다 줄바꿈이 사라지거나(공백 · \\n 글자로 바뀜), 따옴표가 붙거나, BEGIN/END 줄이 빠져도 읽히게
+ * 가운데 base64 본문만 골라 PKCS#8 DER 로 다시 읽어요.
+ */
 function applePrivateKey(e) {
-  return String(e.APPLE_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
+  const body = String(e.APPLE_PRIVATE_KEY || '')
+    .replace(/\\n/g, '\n')
+    .replace(/-----(BEGIN|END)[^-]*-----/g, '')
+    .replace(/[^A-Za-z0-9+/=]/g, '');
+  return crypto.createPrivateKey({ key: Buffer.from(body, 'base64'), format: 'der', type: 'pkcs8' });
 }
 
 /**

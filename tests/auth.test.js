@@ -407,3 +407,15 @@ test('Apple 서버 알림: 서명이 맞는 연결 끊기 알림이면 Apple 연
     }
   });
 });
+
+test('Apple .p8 키: 줄바꿈이 사라지거나 · 따옴표 · BEGIN/END 없이 넣어도 서명된다', () => {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const pem = privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const body = pem.replace(/-----(BEGIN|END) PRIVATE KEY-----/g, '').replace(/\s+/g, '');
+  const variants = [pem, pem.replace(/\n/g, ' '), '"' + pem.replace(/\n/g, '\\n') + '"', body, '  ' + pem + '\n\n'];
+  for (const v of variants) {
+    const t = O.appleClientSecret({ APPLE_PRIVATE_KEY: v, APPLE_KEY_ID: 'K', APPLE_TEAM_ID: 'T', APPLE_CLIENT_ID: 'C' });
+    const [h, p, s] = t.split('.');
+    assert.ok(crypto.verify('sha256', Buffer.from(h + '.' + p), { key: publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(s, 'base64url')), JSON.stringify(v.slice(0, 30)));
+  }
+});
