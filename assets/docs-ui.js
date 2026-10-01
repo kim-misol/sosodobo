@@ -366,6 +366,9 @@
     var intro = document.querySelector('.docs-intro');
     if (intro) intro.hidden = false;
     els.box.addEventListener('click', onBoxClick);
+    // 사람 목록이 늦게 오면 "누가 올림"이 ? 로 보이니, 사람이 바뀔 때 다시 그려요
+    if (window.SettleUI && window.SettleUI.onChange) window.SettleUI.onChange(function () { if (state.loaded) render(); });
+    if (window.PhotoUI && window.PhotoUI.onChange) window.PhotoUI.onChange(function () { if (state.loaded) render(); });
     render();
     load();
   }
