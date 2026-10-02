@@ -85,3 +85,30 @@ test('savePlace: 링크나 좌표로 고치기, 좌표 없는 링크는 오류',
   assert.match(bad.error, /링크에서는 위치를 못 찾았어요/);
   assert.match((await Route.savePlace(3, { name: '' }, deps)).error, /이름/);
 });
+
+test('coordsFromLink: 카카오 kko.to → urlX/urlY(카카오 좌표)를 카카오 변환 API 로, 없으면 주소 검색, 장소 번호는 같은 id 로', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    const u = String(url);
+    calls.push(u);
+    if (u === 'https://kko.to/NUVC04OhAi') {
+      return { status: 302, ok: false, headers: { get: () => 'https://map.kakao.com/?map_type=TYPE_MAP&q=%EA%B2%BD%EB%82%A8+%EB%82%A8%ED%95%B4%EA%B5%B0+%EC%82%BC%EB%8F%99%EB%A9%B4+%EC%82%BC%EC%9D%B4%EB%A1%9C+31-4&urlLevel=2&urlX=727904&urlY=371531' } };
+    }
+    if (u.includes('/geo/transcoord.json')) {
+      assert.match(u, /input_coord=WCONGNAMUL&output_coord=WGS84&x=727904&y=371531/);
+      return { ok: true, json: async () => ({ documents: [{ x: 128.0391, y: 34.8137 }] }) };
+    }
+    if (u.includes('/search/address.json')) return { ok: true, json: async () => ({ documents: [{ x: '128.04', y: '34.81' }] }) };
+    if (u.includes('/search/keyword.json')) return { ok: true, json: async () => ({ documents: [{ id: '111', x: '1', y: '1' }, { id: '27324571', x: '126.5', y: '33.2' }] }) };
+    if (u.startsWith('https://place.map.kakao.com/')) return { status: 200, ok: true, headers: { get: () => null } };
+    return { ok: false, status: 404, headers: { get: () => null } };
+  };
+  const env = { KAKAO_REST_API_KEY: 'k' };
+  assert.deepEqual(await Route.coordsFromLink('https://kko.to/NUVC04OhAi', fetchImpl, { name: '숙소', env }), { lat: 34.8137, lng: 128.0391 });
+  // urlX/urlY 없이 주소만
+  assert.deepEqual(await Route.coordsFromLink('https://map.kakao.com/?q=%EA%B2%BD%EB%82%A8+%EB%82%A8%ED%95%B4%EA%B5%B0', fetchImpl, { env }), { lat: 34.81, lng: 128.04 });
+  // 장소 번호 → 이름 검색 결과 중 같은 id
+  assert.deepEqual(await Route.coordsFromLink('https://place.map.kakao.com/27324571', fetchImpl, { name: '외돌개', env }), { lat: 33.2, lng: 126.5 });
+  // 키가 없으면 못 풀어요
+  assert.equal(await Route.coordsFromLink('https://map.kakao.com/?urlX=1&urlY=2', fetchImpl, { env: {} }), null);
+});

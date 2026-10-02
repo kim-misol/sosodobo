@@ -7,6 +7,7 @@ const { geocodeRegion } = require('./_weather');
 
 const UA = 'sosodobo/1.0 (+https://sosodobo.vercel.app)';
 const RETRY_MS = 3600000; // 못 찾은 곳은 1시간 뒤 다시 (카카오맵 설정을 나중에 켜도 곧 채워지게)
+const LINK_RESOLVER_SINCE = Date.parse('2026-10-02T06:00:00Z'); // 카카오 링크(urlX/urlY · 주소 · 장소 번호) 풀기를 넣은 때
 const LOOKUP_BUDGET_MS = 6000; // 한 번에 이만큼만 찾고, 나머지는 pending 으로 (화면이 이어서 다시 물어요)
 
 function pause(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -24,12 +25,55 @@ async function followRedirects(url, fetchImpl) {
   return cur;
 }
 
-/** 지도 링크 → { lat, lng } | null (짧은 링크는 따라가서) */
-async function coordsFromLink(url, fetchImpl) {
+async function kakaoGet(path, deps) {
+  const key = (deps.env || process.env).KAKAO_REST_API_KEY;
+  if (!key) return null;
+  const res = await deps.fetch('https://dapi.kakao.com' + path, { headers: { Authorization: 'KakaoAK ' + key } });
+  return res.ok ? res.json() : null;
+}
+
+/**
+ * 카카오맵 링크(따라간 뒤 주소)에서 위치: 위경도가 바로 없어서 카카오 API 로
+ *   map.kakao.com/?urlX=&urlY=  → 카카오 좌표(WCONGNAMUL) → WGS84 변환
+ *   map.kakao.com/?q=주소        → 주소 검색
+ *   place.map.kakao.com/123     → 장소 이름으로 검색해서 같은 장소 번호
+ */
+async function kakaoLinkCoords(finalUrl, name, deps) {
+  let u;
+  try { u = new URL(finalUrl); } catch { return null; }
+  if (!/kakao\.com$/.test(u.hostname)) return null;
+  const x = u.searchParams.get('urlX');
+  const y = u.searchParams.get('urlY');
+  if (x && y) {
+    const d = await kakaoGet('/v2/local/geo/transcoord.json?input_coord=WCONGNAMUL&output_coord=WGS84&x=' + encodeURIComponent(x) + '&y=' + encodeURIComponent(y), deps);
+    const doc = d && d.documents && d.documents[0];
+    if (doc && Number.isFinite(Number(doc.y))) return { lat: Number(doc.y), lng: Number(doc.x) };
+  }
+  const q = u.searchParams.get('q');
+  if (q) {
+    const d = await kakaoGet('/v2/local/search/address.json?query=' + encodeURIComponent(q), deps);
+    const doc = d && d.documents && d.documents[0];
+    if (doc) return { lat: Number(doc.y), lng: Number(doc.x) };
+    const k = await kakaoGet('/v2/local/search/keyword.json?size=1&query=' + encodeURIComponent(q), deps);
+    if (k && k.documents && k.documents[0]) return { lat: Number(k.documents[0].y), lng: Number(k.documents[0].x) };
+  }
+  const id = /^place\.map\.kakao\.com$/.test(u.hostname) && (u.pathname.match(/\/(\d+)/) || [])[1];
+  if (id && name) {
+    const k = await kakaoGet('/v2/local/search/keyword.json?size=15&query=' + encodeURIComponent(name), deps);
+    const doc = k && (k.documents || []).find((d) => String(d.id) === id);
+    if (doc) return { lat: Number(doc.y), lng: Number(doc.x) };
+  }
+  return null;
+}
+
+/** 지도 링크 → { lat, lng } | null (짧은 링크는 따라가서). opts: { name, env } — 카카오 링크 풀 때 */
+async function coordsFromLink(url, fetchImpl, opts) {
   const direct = R.parseMapUrl(url);
   if (direct || !/^https?:\/\//i.test(String(url || ''))) return direct;
   try {
-    return R.parseMapUrl(await followRedirects(url, fetchImpl));
+    const finalUrl = R.isShortMapUrl(url) ? await followRedirects(url, fetchImpl) : url;
+    return R.parseMapUrl(finalUrl) ||
+      await kakaoLinkCoords(finalUrl, opts && opts.name, { fetch: fetchImpl, env: opts && opts.env }).catch(() => null);
   } catch {
     return null;
   }
@@ -80,7 +124,7 @@ function near(center, p) {
 /** 장소 하나 자동으로 찾기 → { lat, lng, source } | null */
 async function lookup(point, center, region, deps) {
   if (point.url) {
-    const c = await coordsFromLink(point.url, deps.fetch).catch(() => null);
+    const c = await coordsFromLink(point.url, deps.fetch, { name: point.name, env: deps.env }).catch(() => null);
     if (c) return Object.assign(c, { source: 'link' });
   }
   // 여행 지역 가까운 결과를 먼저, 없으면 첫 결과 (멀면 지도에서는 "먼 곳"으로 빠짐)
@@ -124,7 +168,10 @@ async function tripRoutes(trip, itinerary, deps) {
   for (const day of days) {
     for (const p of day.points) {
       let row = known[p.key];
-      const stale = row && row.lat === null && row.source !== 'manual' && now - new Date(row.updated_at).getTime() > RETRY_MS;
+      const stale = row && row.source !== 'manual' && (
+        (row.lat === null && now - new Date(row.updated_at).getTime() > RETRY_MS) ||
+        // 링크가 있는데 이름 검색으로 찾았던 곳: 카카오 링크 풀기가 나아지기 전 값이라 한 번 다시
+        (p.url && row.source !== 'link' && new Date(row.updated_at).getTime() < LINK_RESOLVER_SINCE));
       if (!row || stale) {
         if (Date.now() - started > LOOKUP_BUDGET_MS) {
           pending = true;
@@ -163,7 +210,7 @@ async function savePlace(tripId, input, deps) {
   let lng = Number(input.lng);
   const url = String(input.url || '').trim() || null;
   if (url && !(Number.isFinite(lat) && Number.isFinite(lng))) {
-    const c = await coordsFromLink(url, deps.fetch || globalThis.fetch);
+    const c = await coordsFromLink(url, deps.fetch || globalThis.fetch, { name, env: deps.env });
     if (!c) return { error: '이 링크에서는 위치를 못 찾았어요. 아래 검색으로 골라 주세요.' };
     lat = c.lat; lng = c.lng;
   }
