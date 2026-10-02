@@ -15,7 +15,7 @@ function fakeDb() {
     if (text.startsWith('SELECT name_key')) return { rows: Object.values(places) };
     if (text.includes('INSERT INTO place_coords')) {
       const manual = text.includes("'manual'");
-      places[values[1]] = { name_key: values[1], lat: values[3], lng: values[4], source: manual ? 'manual' : values[5], updated_at: new Date() };
+      places[values[1]] = { name_key: values[1], lat: values[3], lng: values[4], source: manual ? 'manual' : values[5], map_url: manual ? values[5] : values[6], updated_at: new Date() };
       return { rows: [] };
     }
     return { rows: [] };

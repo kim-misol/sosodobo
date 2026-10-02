@@ -159,11 +159,12 @@ async function tripRoutes(trip, itinerary, deps) {
     return { dayNo: d.dayNo, date: d.date, points: R.dayPoints(d, lodgings) };
   });
 
-  const saved = await sql`SELECT name_key, lat, lng, source, updated_at FROM place_coords WHERE trip_id = ${trip.id}`;
+  const saved = await sql`SELECT name_key, lat, lng, source, map_url, updated_at FROM place_coords WHERE trip_id = ${trip.id}`;
   const known = {};
   saved.rows.forEach((r) => { known[r.name_key] = r; });
 
   const started = Date.now();
+  const looked = {}; // 이번 요청에서 이미 찾아 본 장소 (같은 곳이 다른 링크로 두 번 나와도 한 번만)
   let pending = false;
   for (const day of days) {
     for (const p of day.points) {
@@ -171,15 +172,18 @@ async function tripRoutes(trip, itinerary, deps) {
       const stale = row && row.source !== 'manual' && (
         (row.lat === null && now - new Date(row.updated_at).getTime() > RETRY_MS) ||
         // 링크가 있는데 이름 검색으로 찾았던 곳: 카카오 링크 풀기가 나아지기 전 값이라 한 번 다시
-        (p.url && row.source !== 'link' && new Date(row.updated_at).getTime() < LINK_RESOLVER_SINCE));
-      if (!row || stale) {
+        (p.url && row.source !== 'link' && new Date(row.updated_at).getTime() < LINK_RESOLVER_SINCE) ||
+        // 지도 링크가 새로 생기거나 바뀐 곳
+        (p.url && (row.map_url || null) !== p.url));
+      if (!row || (stale && !looked[p.key])) {
+        looked[p.key] = true;
         if (Date.now() - started > LOOKUP_BUDGET_MS) {
           pending = true;
           p.lat = null; p.lng = null; p.source = null; p.status = 'pending';
           continue;
         }
         const found = await lookup(p, center, regionWord(trip.region), ctx);
-        row = { name_key: p.key, lat: found ? found.lat : null, lng: found ? found.lng : null, source: found ? found.source : 'none' };
+        row = { name_key: p.key, lat: found ? found.lat : null, lng: found ? found.lng : null, source: found ? found.source : 'none', map_url: p.url, updated_at: new Date(now) };
         await sql`
           INSERT INTO place_coords (trip_id, name_key, name, lat, lng, source, map_url)
           VALUES (${trip.id}, ${p.key}, ${p.name}, ${row.lat}, ${row.lng}, ${row.source}, ${p.url})

@@ -57,12 +57,15 @@
       if (i.kind === 'parking') push(i.name, 'parking', '주차', i.mapUrl);
       else { push(i.fromPlace, 'move', '출발', null); push(i.toPlace, 'move', '도착', null); }
     });
+    // 코스는 순서대로: 출발 → (지도 링크가 있으면 그 위치) → 도착. 출발 · 도착이 없으면 코스 자체 (링크가 있으면 링크 위치)
     items.filter(function (i) { return i.kind === 'course'; }).forEach(function (c) {
+      var link = clean(c.mapUrl);
       if (clean(c.fromPlace) || clean(c.toPlace)) {
         push(c.fromPlace, 'course', '코스 출발', null);
+        if (link) push(c.name, 'course', '코스', link);
         push(c.toPlace, 'course', '코스 도착', null);
       } else {
-        push(c.name, 'course', '코스', null);
+        push(c.name, 'course', '코스', link);
       }
     });
     moves('after');

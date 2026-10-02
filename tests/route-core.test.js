@@ -31,6 +31,18 @@ test('dayPoints: 이동의 "1일차 숙소"는 그날 밤 숙소 이름으로', 
   assert.equal(pts.length, 2, '숙소가 한 번만');
 });
 
+test('dayPoints: 코스가 여러 개면 지도 링크가 있는 코스를 순서대로 모두', () => {
+  const day = { items: [
+    { id: 1, position: 1, kind: 'course', name: '용머리 해안', mapUrl: 'https://kko.to/a' },
+    { id: 2, position: 2, kind: 'course', name: '송악산 둘레길', mapUrl: 'https://naver.me/b' },
+    { id: 3, position: 3, kind: 'course', name: '물 커피 로스터스', mapUrl: 'https://maps.app.goo.gl/c' },
+    { id: 4, position: 4, kind: 'course', name: '올레 10코스', fromPlace: '화순', toPlace: '모슬포', mapUrl: 'https://kko.to/d' },
+  ] };
+  const pts = R.dayPoints(day, []);
+  assert.deepEqual(pts.map((p) => p.name), ['용머리 해안', '송악산 둘레길', '물 커피 로스터스', '화순', '올레 10코스', '모슬포']);
+  assert.deepEqual(pts.map((p) => p.url), ['https://kko.to/a', 'https://naver.me/b', 'https://maps.app.goo.gl/c', null, 'https://kko.to/d', null]);
+});
+
 test('dayPoints: 출발 · 도착이 없는 코스는 코스 이름으로', () => {
   const pts = R.dayPoints({ items: [{ id: 1, position: 1, kind: 'course', name: '성산일출봉' }] }, []);
   assert.deepEqual(pts, [{ key: '성산일출봉', name: '성산일출봉', kind: 'course', role: '코스', url: null }]);
