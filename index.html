@@ -1266,7 +1266,8 @@
     background:var(--sand);border-radius:14px;font:inherit;font-size:14px;font-weight:700;color:var(--ink);cursor:pointer;}
   .rt-toggle span{font-weight:500;color:var(--sub);font-size:13px;}
   .rt-open{display:grid;gap:12px;}
-  .rt-map-wrap{position:relative;border:1.5px solid #D9DED6;border-radius:16px;overflow:hidden;height:250px;background:#E9F1EC;}
+  /* isolation: Leaflet 의 z-index(400~1000)가 일정 편집 창 · 시트 위로 올라오지 않게 지도 안에 가둬요 */
+  .rt-map-wrap{position:relative;z-index:0;isolation:isolate;border:1.5px solid #D9DED6;border-radius:16px;overflow:hidden;height:250px;background:#E9F1EC;}
   .rt-map{position:absolute;inset:0;}
   .rt-map-wrap.rt-full{position:fixed;inset:0;z-index:300;height:auto;border-radius:0;border:0;}
   body.rt-full-open{overflow:hidden;}
