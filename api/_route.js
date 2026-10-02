@@ -1,12 +1,12 @@
 // 일정 지도 루트 (api/trips.js 의 part=route · place · place-search 가 씀).
 // 장소 좌표는 여행마다 이름(nameKey)으로 place_coords 에 저장해 두고 다시 쓰고, 처음 보는 장소만 찾아요:
 //   붙여 넣은 지도 링크(구글 · 네이버 · 카카오, 짧은 링크는 따라가서) → 카카오 장소 검색 → OpenStreetMap(Nominatim)
-// 못 찾은 곳도 기록해 두고 사흘 뒤에 다시 찾아요. 여행 지역에서 FAR_KM 넘게 먼 곳은 지도에서 빼요.
+// 못 찾은 곳도 기록해 두고 1시간 뒤에 다시 찾아요. 여행 지역에서 FAR_KM 넘게 먼 곳은 지도에서 빼요.
 const R = require('../assets/route-core.js');
 const { geocodeRegion } = require('./_weather');
 
 const UA = 'sosodobo/1.0 (+https://sosodobo.vercel.app)';
-const RETRY_MS = 3 * 86400000;
+const RETRY_MS = 3600000; // 못 찾은 곳은 1시간 뒤 다시 (카카오맵 설정을 나중에 켜도 곧 채워지게)
 const LOOKUP_BUDGET_MS = 6000; // 한 번에 이만큼만 찾고, 나머지는 pending 으로 (화면이 이어서 다시 물어요)
 
 function pause(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -43,7 +43,7 @@ async function kakaoSearch(query, center, deps, size) {
   if (center) url += '&x=' + center.lng + '&y=' + center.lat;
   const res = await deps.fetch(url, { headers: { Authorization: 'KakaoAK ' + key } });
   if (!res.ok) {
-    if (!deps.kakaoWarned) { deps.kakaoWarned = true; console.warn('kakao local search', res.status); }
+    if (!deps.kakaoWarned) { deps.kakaoWarned = true; console.warn('kakao local search', res.status, (await res.text().catch(() => '')).slice(0, 200)); }
     return [];
   }
   const data = await res.json();
