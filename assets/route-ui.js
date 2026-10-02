@@ -106,7 +106,8 @@
       n++;
       var k = R.KINDS[p.kind] || R.KINDS.move;
       return '<li class="rt-stop" data-rt="focus" data-day="' + dayNo + '" data-key="' + esc(p.key) + '">' + pinHtml(p, n) +
-        '<div class="rt-stop-t"><b>' + esc(p.name) + '</b><span><span class="rt-kind" style="background:' + k.soft + '">' + esc(p.role) + '</span></span></div>' +
+        '<div class="rt-stop-t"><b>' + esc(p.name) + '</b><span><span class="rt-kind" style="background:' + k.soft + '">' + esc(p.role) + '</span>' +
+        (p.src && p.src.length ? ' ' + esc(p.src.join(' · ')) : '') + '</span></div>' +
         '<div class="rt-stop-tools">' +
         '<a href="' + esc(R.placeUrl(p)) + '" target="_blank" rel="noopener" class="rt-mini" aria-label="' + esc(p.name) + ' 지도 앱에서 열기">↗</a>' +
         (canEdit ? '<button type="button" class="rt-mini" data-rt="fix" data-key="' + esc(p.key) + '" data-name="' + esc(p.name) + '" aria-label="' + esc(p.name) + ' 위치 고치기">✎</button>' : '') +

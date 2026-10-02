@@ -18,7 +18,7 @@ test('dayPoints: 주차 · 코스 전 이동(넣은 순서) → 코스 → 코�
   ] };
   const pts = R.dayPoints(day, [{ name: '서귀포 오션 스테이', mapUrl: 'https://naver.me/abc' }]);
   assert.deepEqual(pts.map((p) => p.name), ['김포공항', '제주공항', '외돌개 공영주차장', '외돌개', '월평마을', '서귀포 오션 스테이']);
-  assert.deepEqual(pts.map((p) => p.role), ['출발', '도착', '주차', '코스 출발', '코스 도착', '도착']);
+  assert.deepEqual(pts.map((p) => p.role), ['이동 출발', '이동 도착', '주차', '코스 출발', '코스 도착 · 이동 출발', '이동 도착 · 숙소']);
   assert.equal(pts[2].url, 'https://map.kakao.com/link/map/x,33.24,126.54');
   assert.equal(pts[5].url, 'https://naver.me/abc', '숙소 링크가 같은 곳(이동 도착)에 붙음');
 });
@@ -45,7 +45,7 @@ test('dayPoints: 코스가 여러 개면 지도 링크가 있는 코스를 순�
 
 test('dayPoints: 출발 · 도착이 없는 코스는 코스 이름으로', () => {
   const pts = R.dayPoints({ items: [{ id: 1, position: 1, kind: 'course', name: '성산일출봉' }] }, []);
-  assert.deepEqual(pts, [{ key: '성산일출봉', name: '성산일출봉', kind: 'course', role: '코스', url: null }]);
+  assert.deepEqual(pts, [{ key: '성산일출봉', name: '성산일출봉', kind: 'course', role: '코스', url: null, src: [] }]);
 });
 
 test('parseMapUrl: 구글 · 네이버 · 카카오 링크에서 좌표', () => {

@@ -159,6 +159,11 @@ async function tripRoutes(trip, itinerary, deps) {
     return { dayNo: d.dayNo, date: d.date, points: R.dayPoints(d, lodgings) };
   });
 
+  // 같은 장소가 여러 번 나오면(예: 이동 도착 · 링크 있는 코스) 여행 안 어디든 붙은 링크를 함께 써요
+  const linkOf = {};
+  days.forEach((d) => d.points.forEach((p) => { if (p.url && !linkOf[p.key]) linkOf[p.key] = p.url; }));
+  days.forEach((d) => d.points.forEach((p) => { if (!p.url && linkOf[p.key]) p.url = linkOf[p.key]; }));
+
   const saved = await sql`SELECT name_key, lat, lng, source, map_url, updated_at FROM place_coords WHERE trip_id = ${trip.id}`;
   const known = {};
   saved.rows.forEach((r) => { known[r.name_key] = r; });

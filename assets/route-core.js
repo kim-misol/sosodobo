@@ -29,13 +29,13 @@
   /**
    * 그날 지도에 찍을 장소들 (연달아 같은 곳은 한 번).
    * day: { items: [...] }, lodgings: 그날 밤 숙소 목록
-   * → [{ key, name, kind, role, url }]
+   * → [{ key, name, kind, role, url, src: [코스 이름 …] }]
    */
   function dayPoints(day, lodgings) {
     var items = sortItems(day && day.items);
     var out = [];
     var stay = (lodgings || [])[0];
-    var push = function (name, kind, role, url) {
+    var push = function (name, kind, role, url, src) {
       var n = clean(name);
       // "1일차 숙소" · "숙소" 처럼 지도에 없는 이름은 그날 밤 숙소로
       if (stay && kind === 'move' && /숙소/.test(n) && n.length <= 12) { n = clean(stay.name); url = url || stay.mapUrl; }
@@ -44,26 +44,28 @@
       var prev = out[out.length - 1];
       if (prev && prev.key === key) {
         if (!prev.url && url) prev.url = url;
+        if (role && prev.role.indexOf(role) < 0) prev.role += ' · ' + role;
+        if (src && prev.src.indexOf(src) < 0) prev.src.push(src);
         return;
       }
-      out.push({ key: key, name: n, kind: kind, role: role, url: clean(url) || null });
+      out.push({ key: key, name: n, kind: kind, role: role, url: clean(url) || null, src: src ? [src] : [] });
     };
     var moves = function (timing) {
       items.filter(function (i) { return i.kind === 'move' && (timing === 'after' ? i.timing === 'after' : i.timing !== 'after'); })
-        .forEach(function (m) { push(m.fromPlace, 'move', '출발', null); push(m.toPlace, 'move', '도착', null); });
+        .forEach(function (m) { push(m.fromPlace, 'move', '이동 출발', null); push(m.toPlace, 'move', '이동 도착', null); });
     };
     // 주차와 코스 전 이동은 일정에 넣은 순서대로 섞어서 (예: 비행기로 도착 → 주차)
     items.filter(function (i) { return i.kind === 'parking' || (i.kind === 'move' && i.timing !== 'after'); }).forEach(function (i) {
       if (i.kind === 'parking') push(i.name, 'parking', '주차', i.mapUrl);
-      else { push(i.fromPlace, 'move', '출발', null); push(i.toPlace, 'move', '도착', null); }
+      else { push(i.fromPlace, 'move', '이동 출발', null); push(i.toPlace, 'move', '이동 도착', null); }
     });
     // 코스는 순서대로: 출발 → (지도 링크가 있으면 그 위치) → 도착. 출발 · 도착이 없으면 코스 자체 (링크가 있으면 링크 위치)
     items.filter(function (i) { return i.kind === 'course'; }).forEach(function (c) {
       var link = clean(c.mapUrl);
       if (clean(c.fromPlace) || clean(c.toPlace)) {
-        push(c.fromPlace, 'course', '코스 출발', null);
+        push(c.fromPlace, 'course', '코스 출발', null, c.name);
         if (link) push(c.name, 'course', '코스', link);
-        push(c.toPlace, 'course', '코스 도착', null);
+        push(c.toPlace, 'course', '코스 도착', null, c.name);
       } else {
         push(c.name, 'course', '코스', link);
       }

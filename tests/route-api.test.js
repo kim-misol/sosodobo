@@ -112,3 +112,23 @@ test('coordsFromLink: 카카오 kko.to → urlX/urlY(카카오 좌표)를 카카
   // 키가 없으면 못 풀어요
   assert.equal(await Route.coordsFromLink('https://map.kakao.com/?urlX=1&urlY=2', fetchImpl, { env: {} }), null);
 });
+
+test('tripRoutes: 같은 장소가 링크 없이 먼저(이동 도착), 링크 있는 코스로 나중에 나와도 링크 위치로 · 둘 다 지도에', async () => {
+  const db = fakeDb();
+  const deps = { sql: db.sql, fetch: fakeFetch([]), env: { KAKAO_REST_API_KEY: 'k' }, wait: async () => {} };
+  const it = { days: [{ dayNo: 1, date: '2026-09-24', items: [
+    { id: 1, position: 1, kind: 'move', timing: 'before', fromPlace: '창선면행정복지센터', toPlace: '창선대교 단항검문소' },
+    { id: 2, position: 2, kind: 'course', name: '3코스 동대만길', fromPlace: '창선대교 단항검문소', toPlace: '창선면행정복지센터' },
+    { id: 3, position: 3, kind: 'course', name: '창선대교 단항검문소', mapUrl: 'https://map.kakao.com/link/map/단항,34.9043,128.0347' },
+    { id: 4, position: 4, kind: 'course', name: '창선면사무소', mapUrl: 'https://map.kakao.com/link/map/면사무소,34.8573,128.0101' },
+  ] }], lodgings: [] };
+  const r = await Route.tripRoutes({ id: 1, region: '제주' }, it, deps);
+  const pts = r.days[0].points;
+  assert.deepEqual(pts.map((p) => p.name), ['창선면행정복지센터', '창선대교 단항검문소', '창선면행정복지센터', '창선대교 단항검문소', '창선면사무소']);
+  assert.equal(pts[1].role, '이동 도착 · 코스 출발');
+  assert.deepEqual(pts[1].src, ['3코스 동대만길']);
+  assert.equal(pts[1].lat, 34.9043, '처음 나온 곳도 코스의 링크 위치');
+  assert.equal(pts[1].source, 'link');
+  assert.equal(pts[3].lat, 34.9043);
+  assert.equal(pts[2].role, '코스 도착');
+});

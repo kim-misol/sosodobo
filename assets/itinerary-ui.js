@@ -224,7 +224,9 @@
 
   function itemSummary(it) {
     if (it.kind === 'course') {
-      return esc(it.name) + '<span>' + esc([it.distanceKm !== null && it.distanceKm !== undefined ? it.distanceKm + 'km' : '', it.durationText, it.difficulty ? I.stars(it.difficulty) : ''].filter(Boolean).join(' · ')) + '</span>';
+      var route = [it.fromPlace, it.toPlace].filter(Boolean).join(' → ');
+      return esc(it.name) + '<span>' + esc([route ? '📍 ' + route : '', it.distanceKm !== null && it.distanceKm !== undefined ? it.distanceKm + 'km' : '', it.durationText,
+        it.difficulty ? I.stars(it.difficulty) : '', it.mapUrl ? '🗺 지도 링크' : ''].filter(Boolean).join(' · ')) + '</span>';
     }
     if (it.kind === 'move') {
       return modeOf(it.mode).icon + ' ' + esc([it.fromPlace, it.toPlace].filter(Boolean).join(' → ') || modeOf(it.mode).label) +
